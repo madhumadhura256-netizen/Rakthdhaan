@@ -1,32 +1,35 @@
-import random
 import requests
 
 API = "https://rakthdhaan.onrender.com"
 
-CITIES = ["Bengaluru", "Mumbai", "Delhi", "Chennai", "Hyderabad"]
-GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
-NAMES = ["Arjun Rao", "Priya Nair", "Rahul Verma", "Sneha Iyer", "Vikram Singh",
-         "Meera Patel", "Karan Mehta", "Ananya Das", "Rohit Kumar", "Divya Menon"]
+DONORS = [
+    ("Arjun Rao", "Bengaluru", "A+", "Male"),
+    ("Priya Nair", "Bengaluru", "B+", "Female"),
+    ("Rahul Verma", "Mumbai", "O+", "Male"),
+    ("Sneha Iyer", "Chennai", "AB+", "Female"),
+    ("Vikram Singh", "Delhi", "O-", "Male"),
+]
 
-for i, name in enumerate(NAMES):
+for i, (name, city, group, gender) in enumerate(DONORS, start=1):
+    email = f"demo{i}@raktdhan.test"
     body = {
         "name": name,
-        "email": f"demo{i}_{random.randint(1000, 9999)}@example.com",
+        "email": email,
         "password": "demo1234",
-        "phone": f"9{random.randint(100000000, 999999999)}",
-        "age": random.randint(20, 50),
-        "gender": random.choice(["Male", "Female"]),
-        "blood_group": random.choice(GROUPS),
-        "city": random.choice(CITIES),
+        "phone": f"900000000{i}",
+        "age": 28,
+        "gender": gender,
+        "blood_group": group,
+        "city": city,
         "weight": 70,
         "previous_hb": 14.0,
         "diseases": "None",
         "bad_habits": "None",
         "disorders": "None",
-        "sms_consent": 1,
+        "sms_consent": 0,
         "has_donated_before": 0,
         "status": "active",
         "role": "donor",
     }
     r = requests.post(f"{API}/api/auth/register", json=body, timeout=60)
-    print(name, r.status_code, r.text[:120])
+    print(f"{r.status_code}  {email}  password: demo1234  ({r.text[:60]})")
