@@ -1,9 +1,13 @@
 ﻿import { useEffect, useState } from "react";
 import {
-  Home, LoginPage, DonorRegister, BloodRequest, SearchDonors, Portal, Profile,
+  Home, LoginPage, DonorRegister, BloodRequest, SearchDonors, Portal, DonorProfile,
   HospitalInbox, MyAlerts,
   currentUser, setAuth,
-} from "./pages.jsx";
+} from "./pages";
+
+import { HospitalRegister } from "./HospitalRegister";
+import { HospitalDashboard } from "./HospitalDashboard";
+import { AdminHospitalVerification } from "./AdminHospitalVerification";
 
 const VIEWS = {
   home: Home,
@@ -12,20 +16,29 @@ const VIEWS = {
   request: BloodRequest,
   search: SearchDonors,
   portal: Portal,
-  profile: Profile,
+  profile: DonorProfile,
   hospital: HospitalInbox,
   alerts: MyAlerts,
+  hospital_register: HospitalRegister,
+  hospital_dashboard: HospitalDashboard,
+  admin_hospitals: AdminHospitalVerification,
 };
 
-const STAFF_ROLES = ["admin", "doctor", "paramedical", "blood_connect"];
+const STAFF_ROLES = ["admin", "doctor", "paramedical", "blood_connect", "nurse"];
+
+// Roles that can see the Hospital Inbox link (staff + hospital accounts)
+const INBOX_ROLES = [...STAFF_ROLES, "hospital"];
 
 const ROLE_LABELS = {
   admin: "Admin",
   doctor: "Doctor",
   paramedical: "Paramedical staff",
+  nurse: "Nurse",
   blood_connect: "Blood bank staff",
   donor: "Donor",
   requester: "Requester",
+  hospital: "Hospital",
+  blood_bank: "Blood Bank",
 };
 
 function Drop() {
@@ -67,8 +80,19 @@ export default function App() {
     links.push(["alerts", "My alerts"]);
   }
 
-  if (STAFF_ROLES.includes(user?.role)) {
-    links.push(["hospital", "Hospital inbox"]);
+  // Hospital Inbox: staff AND hospital accounts
+  if (INBOX_ROLES.includes(user?.role)) {
+    links.push(["hospital", "Hospital Inbox"]);
+  }
+
+  // Hospital-specific navigation
+  if (user?.role === "hospital") {
+    links.push(["hospital_dashboard", "Hospital Dashboard"]);
+  }
+
+  // Admin-specific navigation
+  if (user?.role === "admin") {
+    links.push(["admin_hospitals", "Verify Hospitals"]);
   }
 
   return (
@@ -106,6 +130,7 @@ export default function App() {
               <>
                 <button className="ghost sm" onClick={() => go("login")}>Log in</button>
                 <button className="sm" onClick={() => go("donate")}>Become a donor</button>
+                <button className="ghost sm" onClick={() => go("hospital_register")}>Register Hospital</button>
               </>
             )}
           </div>

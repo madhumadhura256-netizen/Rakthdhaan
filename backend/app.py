@@ -15,7 +15,16 @@ from Migrations import (
     ensure_request_flow_tables, refresh_donor_status,
 )
 from hospital import hospital_bp
+from flask_cors import CORS
+import secrets
+app = Flask(__name__)
 
+CORS(
+    app,
+    resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173"]}},
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+)
 app = Flask(__name__)
 app.url_map.strict_slashes = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-me')

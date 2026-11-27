@@ -40,8 +40,11 @@ CREATE TABLE IF NOT EXISTS donors (
     avg_response_minutes REAL DEFAULT 0,
     is_rare_group INTEGER DEFAULT 0,
     priority INTEGER DEFAULT 0,
-     has_donated_before INTEGER DEFAULT 0,
+    has_donated_before INTEGER DEFAULT 0,
     next_eligible_date TEXT,
+    -- Certificate & donation tracking
+    total_units_donated INTEGER DEFAULT 0,
+    donation_codes TEXT DEFAULT '[]',  -- JSON array of certificate codes
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -60,6 +63,39 @@ CREATE TABLE IF NOT EXISTS blood_banks (
     longitude REAL,
     phone TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- NEW: Hospitals table (separate from blood banks)
+CREATE TABLE IF NOT EXISTS hospitals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    hospital_id TEXT UNIQUE NOT NULL,  -- e.g., HOSP-0001
+    name TEXT NOT NULL,
+    address TEXT,
+    city TEXT,
+    pincode TEXT,
+    latitude REAL,
+    longitude REAL,
+    phone TEXT,
+    email TEXT,
+    license_number TEXT,  -- Hospital registration license
+    license_document TEXT,  -- Path to uploaded license document
+    verified INTEGER DEFAULT 0,
+    verified_by TEXT,  -- admin user_id who verified
+    verified_at TEXT,
+    verification_notes TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Hospital blood stock (separate from blood bank stock)
+CREATE TABLE IF NOT EXISTS hospital_blood_stock (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    hospital_id INTEGER NOT NULL REFERENCES hospitals(id) ON DELETE CASCADE,
+    blood_group TEXT NOT NULL CHECK (blood_group IN ('A+','A-','B+','B-','AB+','AB-','O+','O-')),
+    units_available INTEGER DEFAULT 0,
+    last_updated TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(hospital_id, blood_group)
 );
 
 CREATE TABLE IF NOT EXISTS blood_stock (
@@ -100,7 +136,8 @@ CREATE TABLE IF NOT EXISTS donations (
     units INTEGER DEFAULT 1,
     status TEXT DEFAULT 'completed' CHECK (status IN ('completed','pending','cancelled')),
     confirmed_by TEXT,
-    confirmed_at TEXT DEFAULT CURRENT_TIMESTAMP
+    confirmed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    certificate_code TEXT  -- Unique code given to donor for this donation
 );
 
 CREATE TABLE IF NOT EXISTS alerts_sent (
@@ -150,10 +187,23 @@ CREATE TABLE IF NOT EXISTS stock_reservations (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Hospital SMS log
+CREATE TABLE IF NOT EXISTS hospital_sms_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    hospital_id INTEGER NOT NULL REFERENCES hospitals(id) ON DELETE CASCADE,
+    blood_group TEXT NOT NULL,
+    donors_count INTEGER NOT NULL,
+    message TEXT NOT NULL,
+    sent_by INTEGER NOT NULL REFERENCES users(id),
+    sent_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    status TEXT DEFAULT 'sent' CHECK (status IN ('sent','partial','failed'))
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_donors_bg ON donors(blood_group);
 CREATE INDEX IF NOT EXISTS idx_donors_status ON donors(status);
 CREATE INDEX IF NOT EXISTS idx_donors_pincode ON donors(pincode);
+CREATE INDEX IF NOT EXISTS idx_donors_city ON donors(city);
 CREATE INDEX IF NOT EXISTS idx_requests_bg ON requests(blood_group);
 CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
 CREATE INDEX IF NOT EXISTS idx_stock_bg ON blood_stock(blood_group);
@@ -163,3 +213,7 @@ CREATE INDEX IF NOT EXISTS idx_transfers_from_bank ON blood_transfers(from_bank_
 CREATE INDEX IF NOT EXISTS idx_transfers_to_bank ON blood_transfers(to_bank_id);
 CREATE INDEX IF NOT EXISTS idx_transfers_blood_group ON blood_transfers(blood_group);
 CREATE INDEX IF NOT EXISTS idx_users_verified ON users(verified);
+CREATE INDEX IF NOT EXISTS idx_hospitals_hospital_id ON hospitals(hospital_id);
+CREATE INDEX IF NOT EXISTS idx_hospitals_city ON hospitals(city);
+CREATE INDEX IF NOT EXISTS idx_hospital_stock_hospital ON hospital_blood_stock(hospital_id);
+CREATE INDEX IF NOT EXISTS idx_hospital_sms_log_hospital ON hospital_sms_log(hospital_id);

@@ -18,6 +18,7 @@ bcrypt = Bcrypt()
 
 # Role hierarchy
 ROLES = {
+        'hospital': 6,
     'admin': 5,
     'doctor': 4,
     'paramedical': 3,
@@ -33,12 +34,10 @@ PUBLIC_ROLES = {'donor', 'requester'}
 BLOOD_GROUPS = {'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'}
 EMAIL_RE = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$')
 
-STOCK_UPDATE_ROLES = {'admin', 'doctor', 'paramedical', 'blood_connect'}
-DONATION_RECORD_ROLES = {'admin', 'doctor', 'paramedical', 'blood_connect'}
-VERIFY_REQUEST_ROLES = {'admin', 'doctor', 'paramedical', 'blood_connect'}
-VIEW_BANKS_ROLES = {'admin', 'doctor', 'paramedical', 'blood_connect', 'donor', 'requester'}
-
-
+STOCK_UPDATE_ROLES = {'admin', 'doctor', 'paramedical', 'blood_connect', 'hospital'}
+DONATION_RECORD_ROLES = {'admin', 'doctor', 'paramedical', 'blood_connect', 'hospital'}
+VERIFY_REQUEST_ROLES = {'admin', 'doctor', 'paramedical', 'blood_connect', 'hospital'}
+VIEW_BANKS_ROLES = {'admin', 'doctor', 'paramedical', 'blood_connect', 'donor', 'requester', 'hospital'}
 def _token(user_id, role, email):
     payload = {
         'user_id': user_id,

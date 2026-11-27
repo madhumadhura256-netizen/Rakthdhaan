@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, asList, formToObject, BLOOD, getToken, setToken } from "./api";
 
 /* ---------- auth helpers (read the role straight from the JWT) ---------- */
-const STAFF_ROLES = ["admin", "doctor", "paramedical", "blood_connect"];
+const STAFF_ROLES = ["admin", "doctor", "paramedical", "blood_connect", "hospital"];
 
 export function currentUser() {
   const t = getToken();
@@ -58,7 +58,7 @@ function Table({ rows, cols }) {
 
 function ApiForm({ path, method = "POST", extra = {}, okText, children, button }) {
   const [msg, setMsg] = useState(null);
-   async function submit(e) {
+  async function submit(e) {
     e.preventDefault();
     const form = e.target;
     const body = { ...formToObject(form), ...extra };
@@ -102,6 +102,7 @@ function LocationFields() {
   return (
     <>
       <label>City<input name="city" required /></label>
+      <label>Pincode<input name="pincode" maxLength="6" /></label>
       <label>Latitude<input name="latitude" type="number" step="any" required /></label>
       <label>Longitude<input name="longitude" type="number" step="any" required /></label>
       <div className="full">
@@ -134,6 +135,7 @@ export function Home({ go }) {
   const [s, setS] = useState({ donors: null, requests: null, banks: null });
   const [locked, setLocked] = useState(false);
   const [err, setErr] = useState([]);
+  const [topDonors, setTopDonors] = useState([]);
   const to = (k) => () => go && go(k);
 
   useEffect(() => {
@@ -156,6 +158,10 @@ export function Home({ go }) {
     api("/api/bloodbank/banks")
       .then((d) => setS((p) => ({ ...p, banks: asList(d, "banks").length })))
       .catch(fail("banks"));
+    // Fetch top donors
+    api("/api/donors/top-donors?limit=10")
+      .then((d) => setTopDonors(d))
+      .catch(() => {}); // Silently fail for top donors
   }, []);
 
   return (
@@ -191,6 +197,34 @@ export function Home({ go }) {
       )}
       {err.length > 0 && (
         <Msg m={{ ok: false, text: "Some counts could not load (" + err.join("; ") + "). Is the backend running?" }} />
+      )}
+
+      {/* TOP DONORS LEADERBOARD */}
+      {topDonors.length > 0 && (
+        <section className="leaderboard-section">
+          <h2 className="section-title">Top Donors</h2>
+          <p className="sub">Most units donated — verified by certificate codes</p>
+          <div className="leaderboard">
+            {topDonors.map((donor, idx) => (
+              <div key={donor.id} className="leaderboard-item">
+                <div className="rank {idx < 3 ? 'top-three' : ''}">
+                  {idx + 1}
+                </div>
+                <div className="donor-info">
+                  <div className="donor-name">{donor.name}</div>
+                  <div className="donor-meta">
+                    <span className="blood-badge">{donor.blood_group}</span>
+                    <span className="city">{donor.city}</span>
+                  </div>
+                </div>
+                <div className="donor-units">
+                  <span className="units">{donor.total_units_donated}</span>
+                  <span className="units-label">units</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       <h2 className="section-title">How it works</h2>
@@ -271,16 +305,17 @@ function Field({ label, error, children }) {
   );
 }
 
-function PasswordInput({ value, onChange, placeholder }) {
+// Shared PasswordInput component with show/hide toggle
+function PasswordInput({ value, onChange, placeholder, type = "password" }) {
   const [show, setShow] = useState(false);
   return (
     <div className="pw-wrap">
       <input
-        type={show ? "text" : "password"}
+        type={show ? "text" : type}
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        autoComplete="new-password"
+        autoComplete={type === "password" ? "current-password" : "new-password"}
       />
       <button
         type="button"
@@ -703,27 +738,9 @@ export function DonorRegister({ go }) {
     </div>
   );
 }
+
 /* ---------- Blood request ---------- */
-export function BloodRequest() {
-  return (
-    <>
-      <h1>Request blood</h1>
-      <p className="sub">The doctor ID is used to verify the request before donors are alerted.</p>
-      <ApiForm path={() => "/api/requests"} button="Send request"
-        okText="Request created. It will be verified, then matching donors are alerted.">
-        <label>Patient name<input name="patient_name" required /></label>
-        <label>Hospital<input name="hospital_name" required /></label>
-        <label>Doctor ID<input name="doctor_id" required /></label>
-        <label>Blood group<BloodSelect /></label>
-        <label>Units needed<input name="units_needed" type="number" min="1" defaultValue="1" required /></label>
-        <label>Priority<select name="priority" defaultValue="normal">
-          <option>critical</option><option>urgent</option><option>normal</option>
-        </select></label>
-        <LocationFields />
-      </ApiForm>
-    </>
-  );
-}
+export { BloodRequest } from "./BloodRequest";
 
 /* ---------- Search donors ---------- */
 export function SearchDonors() {
@@ -743,7 +760,7 @@ export function SearchDonors() {
   return (
     <>
       <h1>Find donors</h1>
-      <p className="sub">Showing active donors only.</p>
+      <p className="sub">Showing active donors only. Phone numbers are masked for privacy.</p>
       <div className="card">
         <form onSubmit={(e) => { e.preventDefault(); run(e.target); }}>
           <label>Blood group<BloodSelect any /></label>
@@ -766,6 +783,7 @@ function sortDonors(list) {
     (a, b) => (b.has_donated_before ? 1 : 0) - (a.has_donated_before ? 1 : 0)
   );
 }
+
 /* ---------- Blood bank portal ---------- */
 function Login({ onChange }) {
   const [msg, setMsg] = useState(null);
@@ -794,15 +812,18 @@ function Login({ onChange }) {
 export function LoginPage({ go }) {
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({ email: "", password: "" });
+
+  const update = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
     try {
-      const d = await api("/api/auth/login", "POST", formToObject(e.target));
+      const d = await api("/api/auth/login", "POST", form);
       setAuth(d.token || d.access_token);
       const role = currentUser()?.role;
-      go && go(STAFF_ROLES.includes(role) ? "portal" : role === "donor" ? "profile" : "home");
+      go && go(role === "hospital" ? "hospital_dashboard" : STAFF_ROLES.includes(role) ? "portal" : role === "donor" ? "profile" : "home");
     } catch (err) {
       setMsg({ ok: false, text: err.message });
     } finally {
@@ -825,8 +846,8 @@ export function LoginPage({ go }) {
         <h2>Log in</h2>
         <Msg m={msg} />
         <form onSubmit={submit}>
-          <label className="full">Email<input name="email" type="email" required autoComplete="email" /></label>
-          <label className="full">Password<input name="password" type="password" required autoComplete="current-password" /></label>
+          <label className="full">Email<input name="email" type="email" value={form.email} onChange={e => update("email", e.target.value)} required autoComplete="email" /></label>
+          <label className="full">Password<PasswordInput value={form.password} onChange={e => update("password", e.target.value)} placeholder="Enter your password" /></label>
           <div className="full"><button disabled={busy}>{busy ? "Logging in…" : "Log in"}</button></div>
         </form>
         <p className="muted center note">
@@ -869,7 +890,7 @@ export function Portal() {
             <div className="info-icon">ℹ️</div>
             <div>
               <h3>Staff Access Required</h3>
-              <p>You need to be logged in as <strong>admin, doctor, paramedical staff, or blood bank staff</strong> to access stock management, donation recording, and request verification features.</p>
+              <p>You need to be logged in as <strong>admin, doctor, paramedical staff, nurse, or blood bank staff</strong> to access stock management, donation recording, and request verification features.</p>
               <p>Your current role: <strong>{user?.role || "Not logged in"}</strong></p>
             </div>
           </div>
@@ -908,251 +929,107 @@ export function Portal() {
         )}
 
         {isStaff && tab === 3 && (
-          <ApiForm path={(f) => `/api/requests/${f.request_id.value}/verify`} button="Verify request"
-            okText="Request verified. Donors will be alerted.">
-            <label><span className="label-text">Request ID</span><input name="request_id" type="number" required className="input" /></label>
-          </ApiForm>
+          <div className="card">
+            <h3>Verify Request</h3>
+            <p className="sub">View pending requests and verify them to alert donors and hospitals.</p>
+            <VerifyRequestList />
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-/* ---------- My Profile (editable) ---------- */
-export function Profile() {
-  const [donor, setDonor] = useState(null);
-  const [edit, setEdit] = useState(false);
-  const [form, setForm] = useState({});
-  const [msg, setMsg] = useState("");
+// Verify Request component with full request details
+function VerifyRequestList() {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState(null);
 
   useEffect(() => {
-    api("/api/donors/me")
-      .then((d) => {
-        setDonor(d);
-        setForm({
-          name: d.name || "", blood_group: d.blood_group || "O+",
-          gender: d.gender || "Male", age: d.age || "", phone: d.phone || "",
-          aadhaar: d.aadhaar || "", weight: d.weight || "",
-          previous_hb: d.previous_hb || "", diseases: d.diseases || "None",
-          bad_habits: d.bad_habits || "None", disorders: d.disorders || "None",
-          sms_consent: d.sms_consent ? true : false, city: d.city || "",
-          latitude: d.latitude || "", longitude: d.longitude || "",
-          last_donation_date: d.last_donation_date || "",
-        });
-      })
-      .catch((e) => setMsg(getToken() ? e.message : "Log in as a donor to see your profile."));
+    loadRequests();
   }, []);
 
-  const update = (k, v) => setForm({ ...form, [k]: v });
-
-  const save = async () => {
+  async function loadRequests() {
+    setLoading(true);
     try {
-      const res = await api("/api/donors", "POST", {
-        ...form,
-        weight: form.weight ? Number(form.weight) : null,
-        previous_hb: form.previous_hb ? Number(form.previous_hb) : null,
-        latitude: form.latitude ? Number(form.latitude) : null,
-        longitude: form.longitude ? Number(form.longitude) : null,
-        sms_consent: form.sms_consent ? 1 : 0,
-      });
-      setDonor(res.donor);
-      setEdit(false);
-      setMsg("Profile updated successfully.");
-    } catch (e) {
-      setMsg(e.message);
+      const d = await api("/api/requests?status=pending");
+      setRequests(d);
+    } catch (err) {
+      setMsg({ ok: false, text: err.message });
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  if (!donor) {
-    return (
-      <div className="page">
-        <h1>My Profile</h1>
-        {msg && <div className="msg error">{msg}</div>}
-        <div className="card">Loading your profile...</div>
-      </div>
-    );
+  async function verifyRequest(request_id) {
+    try {
+      const d = await api("/api/requests/" + request_id + "/verify", "POST");
+      setMsg({ ok: true, text: d.message });
+      loadRequests();
+    } catch (err) {
+      setMsg({ ok: false, text: err.message });
+    }
   }
 
   return (
-    <div className="page">
-      <h1>My Profile</h1>
-      {msg && <div className={"msg " + (msg.includes("successfully") ? "success" : "error")}>{msg}</div>}
-
-      {!edit ? (
-        <div className="card">
-          <p><strong>Name:</strong> {donor.name}</p>
-          <p><strong>Blood Group:</strong> {donor.blood_group}</p>
-          <p><strong>Gender:</strong> {donor.gender}</p>
-          <p><strong>Age:</strong> {donor.age}</p>
-          <p><strong>Phone:</strong> {donor.phone}</p>
-          <p><strong>Aadhaar:</strong> {donor.aadhaar || "—"}</p>
-          <p><strong>Weight:</strong> {donor.weight ? donor.weight + " kg" : "—"}</p>
-          <p><strong>Previous HB:</strong> {donor.previous_hb || "—"}</p>
-          <p><strong>Diseases:</strong> {donor.diseases || "—"}</p>
-          <p><strong>Bad Habits:</strong> {donor.bad_habits || "—"}</p>
-          <p><strong>Disorders:</strong> {donor.disorders || "—"}</p>
-          <p><strong>City:</strong> {donor.city || "—"}</p>
-          <p><strong>Status:</strong> <span className={"badge " + donor.status}>{donor.status}</span></p>
-          <p><strong>SMS Consent:</strong> {donor.sms_consent ? "Yes" : "No"}</p>
-          <button className="ghost" onClick={() => setEdit(true)}>Edit Profile</button>
-        </div>
+    <>
+      <Msg m={msg} />
+      {loading ? (
+        <p>Loading...</p>
+      ) : requests.length === 0 ? (
+        <p className="muted">No pending requests.</p>
       ) : (
-        <div className="card">
-          <h2>Edit Profile</h2>
-          <div className="form-row">
-            <div><label>Name</label><input value={form.name} onChange={e => update("name", e.target.value)} /></div>
-            <div><label>Blood Group</label><select value={form.blood_group} onChange={e => update("blood_group", e.target.value)}>
-              {BLOOD.map(b => <option key={b} value={b}>{b}</option>)}
-            </select></div>
-          </div>
-          <div className="form-row">
-            <div><label>Gender</label><select value={form.gender} onChange={e => update("gender", e.target.value)}>
-              <option>Male</option><option>Female</option><option>Other</option>
-            </select></div>
-            <div><label>Age</label><input type="number" value={form.age} onChange={e => update("age", e.target.value)} min="18" max="65" /></div>
-          </div>
-          <div className="form-row">
-            <div><label>Phone</label><input value={form.phone} onChange={e => update("phone", e.target.value)} /></div>
-            <div><label>Aadhaar</label><input value={form.aadhaar} onChange={e => update("aadhaar", e.target.value)} /></div>
-          </div>
-          <div className="form-row">
-            <div><label>Weight (kg)</label><input type="number" value={form.weight} onChange={e => update("weight", e.target.value)} min="30" max="150" /></div>
-            <div><label>Previous HB Count</label><input type="number" step="0.1" value={form.previous_hb} onChange={e => update("previous_hb", e.target.value)} min="5" max="20" /></div>
-          </div>
-          <div className="form-row">
-            <div><label>Diseases</label><select value={form.diseases} onChange={e => update("diseases", e.target.value)}>
-              {DISEASES.map(d => <option key={d} value={d}>{d}</option>)}
-            </select></div>
-            <div><label>Bad Habits</label><select value={form.bad_habits} onChange={e => update("bad_habits", e.target.value)}>
-              {BAD_HABITS.map(h => <option key={h} value={h}>{h}</option>)}
-            </select></div>
-          </div>
-          <div className="form-row">
-            <div><label>Disorders</label><select value={form.disorders} onChange={e => update("disorders", e.target.value)}>
-              {DISORDERS.map(d => <option key={d} value={d}>{d}</option>)}
-            </select></div>
-            <div><label>City</label><input value={form.city} onChange={e => update("city", e.target.value)} /></div>
-          </div>
-          <div className="form-row">
-            <div><label>Latitude</label><input value={form.latitude} onChange={e => update("latitude", e.target.value)} /></div>
-            <div><label>Longitude</label><input value={form.longitude} onChange={e => update("longitude", e.target.value)} /></div>
-          </div>
-          <div><label>Last Donation Date</label><input type="date" value={form.last_donation_date} onChange={e => update("last_donation_date", e.target.value)} /></div>
-          <div>
-            <label>
-              <input type="checkbox" checked={form.sms_consent} onChange={e => update("sms_consent", e.target.checked)} />
-              {" "}I consent to receive SMS alerts
-            </label>
-          </div>
-          <div className="full">
-            <button onClick={save}>Save Changes</button>
-            <button className="ghost" onClick={() => setEdit(false)}>Cancel</button>
-          </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>Patient</th><th>Hospital</th><th>Blood Group</th>
+                <th>Units</th><th>Priority</th><th>Doctor</th><th>Nurse</th><th>Paramedic</th>
+                <th>City</th><th>Created</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requests.map(r => (
+                <tr key={r.id}>
+                  <td>{r.id}</td>
+                  <td>{r.patient_name}</td>
+                  <td>{r.hospital_name}</td>
+                  <td><strong>{r.blood_group}</strong></td>
+                  <td>{r.units_needed}</td>
+                  <td><span className={"badge " + r.priority}>{r.priority}</span></td>
+                  <td>{r.doctor_id || '—'}</td>
+                  <td>{r.nurse_id || '—'}</td>
+                  <td>{r.paramedic_id || '—'}</td>
+                  <td>{r.city}</td>
+                  <td>{new Date(r.created_at).toLocaleDateString()}</td>
+                  <td>
+                    <button onClick={() => verifyRequest(r.id)} disabled={loading}>
+                      Verify
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
-/* ---------- Hospital inbox (blood bank / hospital staff) ---------- */
-export function HospitalInbox() {
-  const [rows, setRows] = useState([]);
-  const [msg, setMsg] = useState(null);
-  const user = currentUser();
+/* ---------- My Profile (editable) ---------- */
+export { DonorProfile } from "./DonorProfile";
 
-  async function load() {
-    try {
-      const d = await api("/api/hospital/inbox");
-      setRows(asList(d, "requests"));
-    } catch (err) {
-      setMsg({ ok: false, text: err.message });
-    }
-  }
-
-  useEffect(() => { if (hasStaffAccess(user)) load(); }, []);
-
-  async function respond(id, response) {
-    try {
-      const d = await api("/api/hospital/notices/" + id + "/respond", "POST", { response });
-      setMsg({ ok: true, text: d.message });
-      load();
-    } catch (err) {
-      setMsg({ ok: false, text: err.message });
-    }
-  }
-
-  if (!hasStaffAccess(user)) {
-    return (
-      <div className="page">
-        <h1>Hospital inbox</h1>
-        <div className="card">Log in as blood bank or hospital staff to see incoming requests.</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="page">
-      <h1>Hospital inbox</h1>
-      <p className="sub">Blood requests sent to your blood bank. Critical ones come first.</p>
-      <Msg m={msg} />
-
-      {rows.length === 0 && <div className="card empty">No requests yet.</div>}
-
-      {rows.map((r) => {
-        const enough = r.units_in_stock >= r.units_needed;
-        return (
-          <div className="card request-card" key={r.notice_id}>
-            <div className="request-head">
-              <strong>{r.patient_name}</strong>
-              <span className={"badge " + r.priority}>{r.priority}</span>
-            </div>
-
-            <p>
-              Needs <strong>{r.units_needed}</strong> unit(s) of <strong>{r.blood_group}</strong>{" "}
-              at {r.hospital_name}
-              {r.distance_km != null && " (" + Number(r.distance_km).toFixed(1) + " km from " + r.bank_name + ")"}
-            </p>
-            <p>
-              Your stock: <strong>{r.units_in_stock}</strong> unit(s) {enough ? "(enough)" : "(not enough)"}
-            </p>
-            <p>
-              Status: <strong>{r.notice_status}</strong>
-              {!r.verified && " · waiting for verification"}
-            </p>
-
-            {r.accepted_donors.length > 0 && (
-              <div>
-                <strong>Donors who accepted:</strong>
-                <ul>
-                  {r.accepted_donors.map((d) => (
-                    <li key={d.id}>{d.name} ({d.blood_group}), {d.phone}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="full">
-              {r.notice_status === "notified" && (
-                <>
-                  <button onClick={() => respond(r.notice_id, "accepted")}>We can supply</button>
-                  <button className="ghost" onClick={() => respond(r.notice_id, "declined")}>Cannot supply</button>
-                </>
-              )}
-              {r.notice_status === "accepted" && (
-                <button onClick={() => respond(r.notice_id, "fulfilled")}>Mark fulfilled</button>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+/* ---------- Hospital Inbox (blood bank / hospital staff) ---------- */
+export { HospitalInbox } from "./HospitalInbox";
 
 /* ---------- My alerts (donor) ---------- */
 export function MyAlerts() {
   const [rows, setRows] = useState([]);
   const [msg, setMsg] = useState(null);
+  const [notes, setNotes] = useState({});   // alert_id -> typed message
+  const [busyId, setBusyId] = useState(null);
 
   async function load() {
     try {
@@ -1166,12 +1043,18 @@ export function MyAlerts() {
   useEffect(() => { load(); }, []);
 
   async function respond(id, response) {
+    setBusyId(id);
     try {
-      const d = await api("/api/hospital/my-alerts/" + id + "/respond", "POST", { response });
+      const d = await api("/api/hospital/my-alerts/" + id + "/respond", "POST", {
+        response,
+        message: notes[id] || "",
+      });
       setMsg({ ok: true, text: d.message });
       load();
     } catch (err) {
       setMsg({ ok: false, text: err.message });
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -1183,28 +1066,44 @@ export function MyAlerts() {
 
       {rows.length === 0 && <div className="card empty">No alerts right now.</div>}
 
-      {rows.map((a) => (
-        <div className="card request-card" key={a.alert_id}>
-          <div className="request-head">
-            <strong>{a.blood_group} needed</strong>
-            <span className={"badge " + a.priority}>{a.priority}</span>
-          </div>
-          <p>
-            Please donate at <strong>{a.donate_at || a.hospital_name}</strong>
-            {a.city ? ", " + a.city : ""}.
-          </p>
-
-          {a.status === "accepted" && <p>You accepted. Thank you!</p>}
-          {a.status === "declined" && <p>You declined this request.</p>}
-
-          {(a.status === "sent" || a.status === "delivered" || a.status === "failed") && (
-            <div className="full">
-              <button onClick={() => respond(a.alert_id, "accepted")}>I will donate</button>
-              <button className="ghost" onClick={() => respond(a.alert_id, "declined")}>Cannot donate</button>
+      {rows.map((a) => {
+        const open = a.status === "sent" || a.status === "delivered" || a.status === "failed";
+        return (
+          <div className="card request-card" key={a.alert_id}>
+            <div className="request-head">
+              <strong>{a.blood_group} needed</strong>
+              <span className={"badge " + a.priority}>{a.priority}</span>
             </div>
-          )}
-        </div>
-      ))}
+            <p>
+              Please donate at <strong>{a.donate_at || a.hospital_name}</strong>
+              {a.city ? ", " + a.city : ""}.
+            </p>
+
+            {a.status === "accepted" && <p>You accepted. Thank you!</p>}
+            {a.status === "declined" && <p>You declined this request.</p>}
+
+            {open && (
+              <>
+                <textarea
+                  rows="2"
+                  maxLength={500}
+                  placeholder="Optional message to the hospital (e.g. arrival time)"
+                  value={notes[a.alert_id] || ""}
+                  onChange={(e) => setNotes((n) => ({ ...n, [a.alert_id]: e.target.value }))}
+                />
+                <div className="full">
+                  <button disabled={busyId === a.alert_id} onClick={() => respond(a.alert_id, "accepted")}>
+                    I will donate
+                  </button>
+                  <button className="ghost" disabled={busyId === a.alert_id} onClick={() => respond(a.alert_id, "declined")}>
+                    Cannot donate
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

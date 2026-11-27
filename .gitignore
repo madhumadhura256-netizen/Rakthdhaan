@@ -1,11 +1,13 @@
 # Python
 backend/venv/
+.venv/
 __pycache__/
 *.pyc
 
-# Database (contains donor phone and Aadhaar data) and secrets
+# Database and secrets
 *.db
 .env
+backend/.env
 
 # Node
 frontend/node_modules/

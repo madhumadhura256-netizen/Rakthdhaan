@@ -2,13 +2,14 @@ from flask import Blueprint, jsonify, request, g
 from matching import alert_donors
 from database import get_db
 from decorators import (
-    token_required, 
-    can_update_stock, 
-    can_record_donation, 
+    token_required,
+    can_update_stock,
+    can_record_donation,
     can_verify_request,
     can_view_banks
 )
 from datetime import datetime, timedelta
+import uuid
 
 bloodbank_bp = Blueprint('bloodbank', __name__)
 
@@ -103,6 +104,13 @@ def update_stock():
     db.commit()
     return jsonify({'message': 'Stock updated successfully'})
 
+def _generate_certificate_code():
+    """Generate a unique certificate code like RKT-2024-ABC123"""
+    from datetime import datetime
+    year = datetime.now().year
+    unique = uuid.uuid4().hex[:6].upper()
+    return f"RKT-{year}-{unique}"
+
 @bloodbank_bp.route('/donation', methods=['POST'])
 @token_required
 @can_record_donation
@@ -137,17 +145,20 @@ def record_donation():
 
     reactivate_date = (donation_dt + timedelta(days=cooldown_months * 30)).strftime('%Y-%m-%d')
 
+    # Generate unique certificate code for this donation
+    certificate_code = _generate_certificate_code()
+
     # Mark donor inactive/cooldown
     db.execute(
         'UPDATE donors SET status = ?, last_donation_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         ('inactive', donation_date, donor_id)
     )
 
-    # Record donation
+    # Record donation with certificate code
     db.execute(
-        '''INSERT INTO donations (request_id, donor_id, blood_bank_id, donation_date, units, confirmed_by)
-           VALUES (?, ?, ?, ?, ?, ?)''',
-        (request_id, donor_id, blood_bank_id, donation_date, units, confirmed_by)
+        '''INSERT INTO donations (request_id, donor_id, blood_bank_id, donation_date, units, confirmed_by, certificate_code)
+           VALUES (?, ?, ?, ?, ?, ?, ?)''',
+        (request_id, donor_id, blood_bank_id, donation_date, units, confirmed_by, certificate_code)
     )
 
     # Add stock to blood bank
@@ -173,7 +184,9 @@ def record_donation():
         'donor_id': donor_id,
         'status': 'inactive',
         'cooldown_months': cooldown_months,
-        'eligible_again_after': reactivate_date
+        'eligible_again_after': reactivate_date,
+        'certificate_code': certificate_code,
+        'units_donated': units
     }), 201
 
 @bloodbank_bp.route('/reactivate-donors', methods=['POST'])
