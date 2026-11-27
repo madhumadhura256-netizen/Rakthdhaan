@@ -140,8 +140,6 @@ def register():
             return jsonify({'error': 'Invalid gender'}), 400
         if not re.fullmatch(r'[6-9]\d{9}', phone):
             return jsonify({'error': 'Enter a valid 10-digit mobile number'}), 400
-        if not phone_is_verified(data.get('otp_token', ''), phone):
-            return jsonify({'error': 'Phone number is not verified'}), 400
         if db.execute('SELECT id FROM donors WHERE phone = ?', (phone,)).fetchone():
             return jsonify({'error': 'This phone number is already registered'}), 409
         if aadhaar:
