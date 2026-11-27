@@ -207,7 +207,7 @@ export function Home({ go }) {
           <div className="leaderboard">
             {topDonors.map((donor, idx) => (
               <div key={donor.id} className="leaderboard-item">
-                <div className="rank {idx < 3 ? 'top-three' : ''}">
+               <div className={"rank " + (idx < 3 ? "top-three" : "")}>
                   {idx + 1}
                 </div>
                 <div className="donor-info">
