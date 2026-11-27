@@ -351,7 +351,7 @@ export function DonorRegister({ go }) {
   const [cooldown, setCooldown] = useState(0);    // resend timer in seconds
   const [attempts, setAttempts] = useState(0);
 
-  const verified = !!otpToken;
+  const verified = true;
 
   const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -433,7 +433,6 @@ export function DonorRegister({ go }) {
     if (form.confirm !== form.password) e.confirm = "Passwords do not match.";
 
     if (!phoneValid) e.phone = "Enter a valid 10-digit mobile number starting with 6-9.";
-    else if (!verified) e.phone = "Please verify your phone number with the OTP.";
 
     if (form.aadhaar && !/^[2-9]\d{11}$/.test(form.aadhaar))
       e.aadhaar = "Aadhaar must be exactly 12 digits and cannot start with 0 or 1.";
@@ -496,7 +495,6 @@ export function DonorRegister({ go }) {
         last_donation_date: lastDate || null,
         status: inactive ? "inactive" : "active",
         next_eligible_date: nextDate ? nextDate.toISOString().split("T")[0] : null,
-        otp_token: otpToken,
       });
       setAuth(d.token || d.access_token);
 
@@ -554,7 +552,7 @@ export function DonorRegister({ go }) {
                 value={form.phone}
                 onChange={(e) => changePhone(e.target.value)}
                 placeholder="9876543210"
-                disabled={verified}
+                
               />
               {!verified && (
                 <button
@@ -566,7 +564,7 @@ export function DonorRegister({ go }) {
                   {cooldown > 0 ? "Resend in " + cooldown + "s" : otpSent ? "Resend OTP" : "Send OTP"}
                 </button>
               )}
-              {verified && <span className="badge active">Verified ✓</span>}
+             
             </div>
           </Field>
 
