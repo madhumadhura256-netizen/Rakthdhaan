@@ -1,7 +1,5 @@
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('donor','requester','blood_bank','hospital','admin','doctor','paramedical','blood_connect')),
@@ -14,7 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS donors (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     blood_group TEXT NOT NULL CHECK (blood_group IN ('A+','A-','B+','B-','AB+','AB-','O+','O-')),
@@ -42,15 +40,14 @@ CREATE TABLE IF NOT EXISTS donors (
     priority INTEGER DEFAULT 0,
     has_donated_before INTEGER DEFAULT 0,
     next_eligible_date TEXT,
-    -- Certificate & donation tracking
     total_units_donated INTEGER DEFAULT 0,
-    donation_codes TEXT DEFAULT '[]',  -- JSON array of certificate codes
+    donation_codes TEXT DEFAULT '[]',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS blood_banks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     hospital_name TEXT,
@@ -65,11 +62,10 @@ CREATE TABLE IF NOT EXISTS blood_banks (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
--- NEW: Hospitals table (separate from blood banks)
 CREATE TABLE IF NOT EXISTS hospitals (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    hospital_id TEXT UNIQUE NOT NULL,  -- e.g., HOSP-0001
+    hospital_id TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
     address TEXT,
     city TEXT,
@@ -78,19 +74,18 @@ CREATE TABLE IF NOT EXISTS hospitals (
     longitude REAL,
     phone TEXT,
     email TEXT,
-    license_number TEXT,  -- Hospital registration license
-    license_document TEXT,  -- Path to uploaded license document
+    license_number TEXT,
+    license_document TEXT,
     verified INTEGER DEFAULT 0,
-    verified_by TEXT,  -- admin user_id who verified
+    verified_by TEXT,
     verified_at TEXT,
     verification_notes TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
--- Hospital blood stock (separate from blood bank stock)
 CREATE TABLE IF NOT EXISTS hospital_blood_stock (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     hospital_id INTEGER NOT NULL REFERENCES hospitals(id) ON DELETE CASCADE,
     blood_group TEXT NOT NULL CHECK (blood_group IN ('A+','A-','B+','B-','AB+','AB-','O+','O-')),
     units_available INTEGER DEFAULT 0,
@@ -99,7 +94,7 @@ CREATE TABLE IF NOT EXISTS hospital_blood_stock (
 );
 
 CREATE TABLE IF NOT EXISTS blood_stock (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     blood_bank_id INTEGER NOT NULL REFERENCES blood_banks(id) ON DELETE CASCADE,
     blood_group TEXT NOT NULL CHECK (blood_group IN ('A+','A-','B+','B-','AB+','AB-','O+','O-')),
     units_available INTEGER DEFAULT 0,
@@ -108,11 +103,13 @@ CREATE TABLE IF NOT EXISTS blood_stock (
 );
 
 CREATE TABLE IF NOT EXISTS requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     requester_id INTEGER REFERENCES users(id),
     patient_name TEXT NOT NULL,
     hospital_name TEXT NOT NULL,
     doctor_id TEXT NOT NULL,
+    nurse_id TEXT,
+    paramedic_id TEXT,
     blood_group TEXT NOT NULL CHECK (blood_group IN ('A+','A-','B+','B-','AB+','AB-','O+','O-')),
     units_needed INTEGER DEFAULT 1,
     priority TEXT DEFAULT 'normal' CHECK (priority IN ('critical','urgent','normal')),
@@ -128,7 +125,7 @@ CREATE TABLE IF NOT EXISTS requests (
 );
 
 CREATE TABLE IF NOT EXISTS donations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     request_id INTEGER REFERENCES requests(id),
     donor_id INTEGER NOT NULL REFERENCES donors(id),
     blood_bank_id INTEGER NOT NULL REFERENCES blood_banks(id),
@@ -137,11 +134,11 @@ CREATE TABLE IF NOT EXISTS donations (
     status TEXT DEFAULT 'completed' CHECK (status IN ('completed','pending','cancelled')),
     confirmed_by TEXT,
     confirmed_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    certificate_code TEXT  -- Unique code given to donor for this donation
+    certificate_code TEXT
 );
 
 CREATE TABLE IF NOT EXISTS alerts_sent (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
     donor_id INTEGER NOT NULL REFERENCES donors(id) ON DELETE CASCADE,
     channel TEXT DEFAULT 'push' CHECK (channel IN ('push','sms')),
@@ -151,7 +148,7 @@ CREATE TABLE IF NOT EXISTS alerts_sent (
 );
 
 CREATE TABLE IF NOT EXISTS blood_transfers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     from_bank_id INTEGER NOT NULL REFERENCES blood_banks(id),
     to_bank_id INTEGER NOT NULL REFERENCES blood_banks(id),
     blood_group TEXT NOT NULL CHECK (blood_group IN ('A+','A-','B+','B-','AB+','AB-','O+','O-')),
@@ -179,7 +176,7 @@ CREATE TABLE IF NOT EXISTS blood_transfers (
 );
 
 CREATE TABLE IF NOT EXISTS stock_reservations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     transfer_id INTEGER NOT NULL REFERENCES blood_transfers(id),
     blood_bank_id INTEGER NOT NULL REFERENCES blood_banks(id),
     blood_group TEXT NOT NULL CHECK (blood_group IN ('A+','A-','B+','B-','AB+','AB-','O+','O-')),
@@ -187,9 +184,8 @@ CREATE TABLE IF NOT EXISTS stock_reservations (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
--- Hospital SMS log
 CREATE TABLE IF NOT EXISTS hospital_sms_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     hospital_id INTEGER NOT NULL REFERENCES hospitals(id) ON DELETE CASCADE,
     blood_group TEXT NOT NULL,
     donors_count INTEGER NOT NULL,
@@ -199,13 +195,24 @@ CREATE TABLE IF NOT EXISTS hospital_sms_log (
     status TEXT DEFAULT 'sent' CHECK (status IN ('sent','partial','failed'))
 );
 
--- Indexes
+CREATE TABLE IF NOT EXISTS request_bank_notices (
+    id SERIAL PRIMARY KEY,
+    request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+    blood_bank_id INTEGER NOT NULL REFERENCES blood_banks(id) ON DELETE CASCADE,
+    distance_km REAL,
+    status TEXT DEFAULT 'notified' CHECK (status IN ('notified', 'accepted', 'declined', 'fulfilled')),
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    responded_at TEXT,
+    UNIQUE (request_id, blood_bank_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_donors_bg ON donors(blood_group);
 CREATE INDEX IF NOT EXISTS idx_donors_status ON donors(status);
 CREATE INDEX IF NOT EXISTS idx_donors_pincode ON donors(pincode);
 CREATE INDEX IF NOT EXISTS idx_donors_city ON donors(city);
 CREATE INDEX IF NOT EXISTS idx_requests_bg ON requests(blood_group);
 CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
+CREATE INDEX IF NOT EXISTS idx_requests_requester ON requests(requester_id);
 CREATE INDEX IF NOT EXISTS idx_stock_bg ON blood_stock(blood_group);
 CREATE INDEX IF NOT EXISTS idx_alerts_request ON alerts_sent(request_id);
 CREATE INDEX IF NOT EXISTS idx_transfers_status ON blood_transfers(status);

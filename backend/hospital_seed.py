@@ -21,7 +21,7 @@ with app.app_context():
               'hospital_blood_stock', 'hospital_sms_log', 'hospitals', 'users']
     for t in tables:
         db.execute(f'DELETE FROM {t}')
-        db.execute(f'DELETE FROM sqlite_sequence WHERE name = ?', (t,))
+        db.execute(f'DELETE FROM sqlite_sequence WHERE name = %s', (t,))
     db.commit()
 
     # Indian cities with coordinates
@@ -69,7 +69,7 @@ with app.app_context():
         # Create user with hospital role
         pw_hash = bcrypt.generate_password_hash("hospital123").decode('utf-8')
         cursor = db.execute(
-            'INSERT INTO users (email, password_hash, role, phone, city, verified, verified_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO users (email, password_hash, role, phone, city, verified, verified_at) VALUES (%s, %s, %s, %s, %s, %s, %s)',
             (email, pw_hash, 'hospital', phone, city, 1, date.today().isoformat())
         )
         user_id = cursor.lastrowid
@@ -79,7 +79,7 @@ with app.app_context():
         cursor = db.execute(
             '''INSERT INTO hospitals (user_id, hospital_id, name, address, city, pincode,
                    latitude, longitude, phone, email, license_number, verified, verified_by, verified_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
             (user_id, hospital_id, name, f"{random.randint(1,999)} Main Road", city, pincode,
              lat + random.uniform(-0.02, 0.02), lon + random.uniform(-0.02, 0.02),
              phone, email, license_num, 1, 1, date.today().isoformat())
@@ -90,7 +90,7 @@ with app.app_context():
         for bg in blood_groups:
             units = random.randint(0, 20) if bg in ('O+', 'A+', 'B+') else random.randint(0, 10)
             db.execute(
-                'INSERT INTO hospital_blood_stock (hospital_id, blood_group, units_available) VALUES (?, ?, ?)',
+                'INSERT INTO hospital_blood_stock (hospital_id, blood_group, units_available) VALUES (%s, %s, %s)',
                 (hospital_db_id, bg, units)
             )
 
@@ -105,7 +105,7 @@ with app.app_context():
 
         pw_hash = bcrypt.generate_password_hash("staff123").decode('utf-8')
         db.execute(
-            'INSERT INTO users (email, password_hash, role, phone, city, verified, verified_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO users (email, password_hash, role, phone, city, verified, verified_at) VALUES (%s, %s, %s, %s, %s, %s, %s)',
             (email, pw_hash, role, phone, city, 1, date.today().isoformat())
         )
 
@@ -118,7 +118,7 @@ with app.app_context():
 
         pw_hash = bcrypt.generate_password_hash("bloodbank123").decode('utf-8')
         db.execute(
-            'INSERT INTO users (email, password_hash, role, phone, city, verified, verified_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO users (email, password_hash, role, phone, city, verified, verified_at) VALUES (%s, %s, %s, %s, %s, %s, %s)',
             (email, pw_hash, 'blood_connect', phone, city, 1, date.today().isoformat())
         )
 
@@ -143,7 +143,7 @@ with app.app_context():
         db.execute(
             '''INSERT INTO requests (patient_name, hospital_name, doctor_id, nurse_id, paramedic_id,
                    blood_group, units_needed, priority, city, pincode, verified, verified_by, verified_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
             (patient, hospital_name, doc_id, nurse_id, para_id, bg, units, priority, city, pincode, 1, 1, date.today().isoformat())
         )
 
@@ -153,7 +153,7 @@ with app.app_context():
         db.execute(
             '''INSERT INTO requests (patient_name, hospital_name, doctor_id, nurse_id, paramedic_id,
                    blood_group, units_needed, priority, city, pincode, verified)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
             (patient, hospital_name, doc_id, nurse_id, para_id, bg, units, priority, city, pincode, 0)
         )
 
@@ -167,7 +167,7 @@ with app.app_context():
         for hosp in hospitals:
             db.execute(
                 '''INSERT INTO request_bank_notices (request_id, blood_bank_id, status, distance_km)
-                   VALUES (?, ?, ?, ?)''',
+                   VALUES (%s, %s, %s, %s)''',
                 (req['id'], hosp['id'], 'notified', round(random.uniform(1, 15), 1))
             )
             break  # Just assign to first hospital for demo
@@ -181,7 +181,7 @@ with app.app_context():
             status = random.choice(['sent', 'delivered', 'accepted', 'declined'])
             db.execute(
                 '''INSERT INTO alerts_sent (request_id, donor_id, channel, status, sent_at, responded_at)
-                   VALUES (?, ?, ?, ?, ?, ?)''',
+                   VALUES (%s, %s, %s, %s, %s, %s)''',
                 (req['id'], donor['id'], 'sms', status,
                  (date.today() - timedelta(days=random.randint(0, 5))).isoformat(),
                  (date.today() - timedelta(days=random.randint(0, 3))).isoformat() if status in ('accepted', 'declined') else None)
@@ -194,7 +194,7 @@ with app.app_context():
             bg = random.choice(blood_groups)
             db.execute(
                 '''INSERT INTO hospital_sms_log (hospital_id, blood_group, donors_count, message, sent_by, status)
-                   VALUES (?, ?, ?, ?, ?, ?)''',
+                   VALUES (%s, %s, %s, %s, %s, %s)''',
                 (hosp['id'], bg, random.randint(5, 30),
                  f"URGENT: {hosp['name']} needs {bg} blood donors.",
                  1, random.choice(['sent', 'partial']))

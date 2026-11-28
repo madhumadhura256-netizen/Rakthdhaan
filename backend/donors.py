@@ -69,13 +69,13 @@ def list_donors():
         # so default to masked for public endpoint
         pass
 
-    query = 'SELECT * FROM donors WHERE status = ?'
+    query = 'SELECT * FROM donors WHERE status = %s'
     params = [status]
     if blood_group:
-        query += ' AND blood_group = ?'
+        query += ' AND blood_group = %s'
         params.append(blood_group)
     if city:
-        query += ' AND city = ?'
+        query += ' AND city = %s'
         params.append(city)
 
     rows = db.execute(query, params).fetchall()
@@ -87,7 +87,7 @@ def list_donors():
 def donor_me():
     db = get_db()
     user_id = g.current_user['user_id']
-    row = db.execute('SELECT * FROM donors WHERE user_id = ?', (user_id,)).fetchone()
+    row = db.execute('SELECT * FROM donors WHERE user_id = %s', (user_id,)).fetchone()
     if not row:
         return jsonify({'error': 'Donor profile not found'}), 404
     # Donor can see their own full details
@@ -97,7 +97,7 @@ def donor_me():
 @donors_bp.route('/<int:donor_id>', methods=['GET'])
 def get_donor(donor_id):
     db = get_db()
-    row = db.execute('SELECT * FROM donors WHERE id = ?', (donor_id,)).fetchone()
+    row = db.execute('SELECT * FROM donors WHERE id = %s', (donor_id,)).fetchone()
     if not row:
         return jsonify({'error': 'Donor not found'}), 404
     # Public detail - mask phone
@@ -110,7 +110,7 @@ def get_donor(donor_id):
 def get_donor_full(donor_id):
     """Full donor details including phone - only for authorized roles"""
     db = get_db()
-    row = db.execute('SELECT * FROM donors WHERE id = ?', (donor_id,)).fetchone()
+    row = db.execute('SELECT * FROM donors WHERE id = %s', (donor_id,)).fetchone()
     if not row:
         return jsonify({'error': 'Donor not found'}), 404
     return jsonify(_donor_row_to_dict(row, full=True, can_see_phone=True))
@@ -134,7 +134,7 @@ def update_donor_profile():
                 value = 1 if value else 0
             elif value == '' and key in ('last_donation_date', 'aadhaar'):
                 value = None
-            fields.append(f'{key} = ?')
+            fields.append(f'{key} = %s')
             params.append(value)
 
     if not fields:
@@ -142,11 +142,11 @@ def update_donor_profile():
 
     fields.append('updated_at = CURRENT_TIMESTAMP')
     params.append(user_id)
-    query = f'UPDATE donors SET {", ".join(fields)} WHERE user_id = ?'
+    query = f'UPDATE donors SET {", ".join(fields)} WHERE user_id = %s'
     db.execute(query, params)
     db.commit()
 
-    row = db.execute('SELECT * FROM donors WHERE user_id = ?', (user_id,)).fetchone()
+    row = db.execute('SELECT * FROM donors WHERE user_id = %s', (user_id,)).fetchone()
     return jsonify({'message': 'Profile updated', 'donor': _donor_row_to_dict(row, full=True, can_see_phone=True)})
 
 
@@ -165,14 +165,14 @@ def verify_certificate_code():
 
     # Check if code exists in donations table
     donation = db.execute(
-        'SELECT * FROM donations WHERE certificate_code = ?', (code,)
+        'SELECT * FROM donations WHERE certificate_code = %s', (code,)
     ).fetchone()
 
     if not donation:
         return jsonify({'error': 'Invalid certificate code'}), 404
 
     # Check if this code was already used by this donor
-    donor = db.execute('SELECT donation_codes, total_units_donated FROM donors WHERE user_id = ?', (user_id,)).fetchone()
+    donor = db.execute('SELECT donation_codes, total_units_donated FROM donors WHERE user_id = %s', (user_id,)).fetchone()
     if not donor:
         return jsonify({'error': 'Donor profile not found'}), 404
 
@@ -191,7 +191,7 @@ def verify_certificate_code():
     new_total = (donor['total_units_donated'] or 0) + (donation['units'] or 1)
 
     db.execute(
-        'UPDATE donors SET donation_codes = ?, total_units_donated = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
+        'UPDATE donors SET donation_codes = %s, total_units_donated = %s, updated_at = CURRENT_TIMESTAMP WHERE user_id = %s',
         (json.dumps(codes), new_total, user_id)
     )
     db.commit()
@@ -215,7 +215,7 @@ def top_donors():
         FROM donors
         WHERE total_units_donated > 0
         ORDER BY total_units_donated DESC, created_at ASC
-        LIMIT ?
+        LIMIT %s
     ''', (limit,)).fetchall()
 
     return jsonify([dict(r) for r in rows])

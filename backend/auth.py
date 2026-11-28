@@ -120,7 +120,7 @@ def register():
     if len(password) < 8 or not re.search(r'[A-Za-z]', password) or not re.search(r'\d', password):
         return jsonify({'error': 'Password must be 8+ characters with a letter and a number'}), 400
 
-    if db.execute('SELECT id FROM users WHERE email = ?', (email,)).fetchone():
+    if db.execute('SELECT id FROM users WHERE email = %s', (email,)).fetchone():
         return jsonify({'error': 'Email already registered'}), 409
 
     # ---------- donor checks ----------
@@ -140,12 +140,12 @@ def register():
             return jsonify({'error': 'Invalid gender'}), 400
         if not re.fullmatch(r'[6-9]\d{9}', phone):
             return jsonify({'error': 'Enter a valid 10-digit mobile number'}), 400
-        if db.execute('SELECT id FROM donors WHERE phone = ?', (phone,)).fetchone():
+        if db.execute('SELECT id FROM donors WHERE phone = %s', (phone,)).fetchone():
             return jsonify({'error': 'This phone number is already registered'}), 409
         if aadhaar:
             if not re.fullmatch(r'[2-9]\d{11}', aadhaar):
                 return jsonify({'error': 'Aadhaar must be exactly 12 digits'}), 400
-            if db.execute('SELECT id FROM donors WHERE aadhaar = ?', (aadhaar,)).fetchone():
+            if db.execute('SELECT id FROM donors WHERE aadhaar = %s', (aadhaar,)).fetchone():
                 return jsonify({'error': 'This Aadhaar number is already registered'}), 409
         if weight is not None and weight < 45:
             return jsonify({'error': 'Donors must weigh at least 45 kg'}), 400
@@ -201,15 +201,14 @@ def register():
     # ---------- save ----------
     pw_hash = bcrypt.generate_password_hash(password).decode('utf-8')
     cursor = db.execute(
-        'INSERT INTO users (email, password_hash, role, phone, city) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO users (email, password_hash, role, phone, city) VALUES (%s, %s, %s, %s, %s) RETURNING id',
         (email, pw_hash, role, phone, city),
     )
-    user_id = cursor.lastrowid
-
+    user_id = cursor.fetchone()['id']
     if donor:
         donor['user_id'] = user_id
         columns = ', '.join(donor)
-        marks = ', '.join('?' * len(donor))
+        marks = ', '.join('%s' * len(donor))
         db.execute(f'INSERT INTO donors ({columns}) VALUES ({marks})', list(donor.values()))
 
     db.commit()
@@ -231,7 +230,7 @@ def login():
     if not email or not password:
         return jsonify({'error': 'email and password are required'}), 400
 
-    user = db.execute('SELECT * FROM users WHERE lower(email) = ?', (email,)).fetchone()
+    user = db.execute('SELECT * FROM users WHERE lower(email) = %s', (email,)).fetchone()
     if not user or not bcrypt.check_password_hash(user['password_hash'], password):
         return jsonify({'error': 'Invalid email or password'}), 401
 

@@ -21,7 +21,7 @@ def insert(table, **values):
     skipped.update(f'{table}.{k}' for k in values if k not in cols)
     values = {k: v for k, v in values.items() if k in cols}
     cur = conn.execute(
-        f'INSERT INTO {table} ({", ".join(values)}) VALUES ({", ".join("?" * len(values))})',
+        f'INSERT INTO {table} ({", ".join(values)}) VALUES ({", ".join("%s" * len(values))})',
         list(values.values()),
     )
     return cur.lastrowid
@@ -38,7 +38,7 @@ def next_hospital_id():
 
 pw_hash = bcrypt.hashpw(PASSWORD.encode(), bcrypt.gensalt()).decode()
 
-# name, city, lat, lon, already verified?
+# name, city, lat, lon, already verified%s
 HOSPITALS = [
     ('City Care Hospital', 'Bengaluru', 12.9716, 77.5946, 1),
     ('Lakeview Medical Centre', 'Bengaluru', 12.9352, 77.6245, 0),
@@ -56,13 +56,13 @@ REQUESTS = [  # patient, blood group, units, priority, verified
 
 # A requester account to own the demo requests
 req_email = 'demo.requester@raktdhan.test'
-row = conn.execute('SELECT id FROM users WHERE email = ?', (req_email,)).fetchone()
+row = conn.execute('SELECT id FROM users WHERE email = %s', (req_email,)).fetchone()
 requester_id = row['id'] if row else insert(
     'users', email=req_email, password_hash=pw_hash, role='requester', phone='', city='Bengaluru', verified=1)
 
 for i, (name, city, lat, lon, verified) in enumerate(HOSPITALS, start=1):
     email = f'demo.hospital{i}@raktdhan.test'
-    if conn.execute('SELECT id FROM users WHERE email = ?', (email,)).fetchone():
+    if conn.execute('SELECT id FROM users WHERE email = %s', (email,)).fetchone():
         print(f'skip (exists): {name}')
         continue
 

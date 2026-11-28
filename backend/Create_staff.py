@@ -22,12 +22,12 @@ def main():
         return
     with app.app_context():
         db = get_db()
-        if db.execute('SELECT id FROM users WHERE email = ?', (email,)).fetchone():
+        if db.execute('SELECT id FROM users WHERE email = %s', (email,)).fetchone():
             print('That email already exists.')
             return
         pw_hash = bcrypt.generate_password_hash(password).decode('utf-8')
         db.execute(
-            'INSERT INTO users (email, password_hash, role, phone, city) VALUES (?, ?, ?, ?, ?)',
+            'INSERT INTO users (email, password_hash, role, phone, city) VALUES (%s, %s, %s, %s, %s)',
             (email, pw_hash, role, '', ''),
         )
         db.commit()

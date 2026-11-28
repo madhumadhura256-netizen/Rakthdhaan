@@ -17,7 +17,7 @@ def nearest_banks(db, req, limit=MAX_BANKS, max_km=MAX_KM):
             (b for b in banks if b['distance_km'] < 9999),
             key=lambda b: b['distance_km'],
         )
-        # nothing inside the radius? still use the 3 closest
+        # nothing inside the radius%s still use the 3 closest
         near = [b for b in known if b['distance_km'] <= max_km] or known[:3]
 
     # 2) Otherwise fall back to banks in the same city
@@ -36,7 +36,7 @@ def notify_banks(db, req):
     for b in banks:
         db.execute(
             'INSERT OR IGNORE INTO request_bank_notices (request_id, blood_bank_id, distance_km) '
-            'VALUES (?, ?, ?)',
+            'VALUES (%s, %s, %s)',
             (req['id'], b['id'], b['distance_km']),
         )
     db.commit()
@@ -51,8 +51,8 @@ def stock_summary(db, req):
         FROM request_bank_notices n
         JOIN blood_banks b ON b.id = n.blood_bank_id
         LEFT JOIN blood_stock s
-               ON s.blood_bank_id = n.blood_bank_id AND s.blood_group = ?
-        WHERE n.request_id = ?
+               ON s.blood_bank_id = n.blood_bank_id AND s.blood_group = %s
+        WHERE n.request_id = %s
         ORDER BY n.distance_km IS NULL, n.distance_km
     ''', (req['blood_group'], req['id'])).fetchall()
 

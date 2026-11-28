@@ -40,7 +40,7 @@ def alert_donors(db, req, donors, limit=20, place=None):
     already = {
         row['donor_id']
         for row in db.execute(
-            'SELECT donor_id FROM alerts_sent WHERE request_id = ?', (req['id'],)
+            'SELECT donor_id FROM alerts_sent WHERE request_id = %s', (req['id'],)
         )
     }
     ranked = [d for d in rank_donors(req, donors) if d['id'] not in already][:limit]
@@ -62,7 +62,7 @@ def alert_donors(db, req, donors, limit=20, place=None):
             status = 'failed'
         db.execute(
             "INSERT INTO alerts_sent (request_id, donor_id, channel, status) "
-            "VALUES (?, ?, 'sms', ?)",
+            "VALUES (%s, %s, 'sms', %s)",
             (req['id'], d['id'], status),
         )
     db.commit()

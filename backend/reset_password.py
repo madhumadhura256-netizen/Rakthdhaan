@@ -16,7 +16,7 @@ if password != getpass.getpass('Confirm password: '):
 
 pw_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 conn = sqlite3.connect(DB)
-cur = conn.execute('UPDATE users SET password_hash = ? WHERE lower(email) = ?', (pw_hash, email))
+cur = conn.execute('UPDATE users SET password_hash = %s WHERE lower(email) = %s', (pw_hash, email))
 conn.commit()
 print('Password updated.' if cur.rowcount else 'No account with that email.')
 conn.close()

@@ -21,13 +21,13 @@ if 'doctor_id' not in cols:
 
 pw = bcrypt.hashpw(PASSWORD.encode(), bcrypt.gensalt()).decode()
 for email, role, doc_id in ACCOUNTS:
-    row = conn.execute('SELECT id FROM users WHERE email = ?', (email,)).fetchone()
+    row = conn.execute('SELECT id FROM users WHERE email = %s', (email,)).fetchone()
     if row:
-        conn.execute('UPDATE users SET role=?, password_hash=?, verified=1, doctor_id=? WHERE id=?',
+        conn.execute('UPDATE users SET role=%s, password_hash=%s, verified=1, doctor_id=%s WHERE id=%s',
                      (role, pw, doc_id, row[0]))
     else:
         conn.execute(
-            'INSERT INTO users (email, password_hash, role, verified, doctor_id) VALUES (?,?,?,?,?)',
+            'INSERT INTO users (email, password_hash, role, verified, doctor_id) VALUES (%s,%s,%s,%s,%s)',
             (email, pw, role, 1, doc_id))
     print(f'{role:14} {email}  doctor_id={doc_id}')
 

@@ -101,13 +101,13 @@ for i in range(50):
 
     email = f"bank{i+1}@example.com"
     c.execute(
-        "INSERT INTO users (email, password_hash, role, phone, city) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO users (email, password_hash, role, phone, city) VALUES (%s, %s, %s, %s, %s)",
         (email, "$2b$12$placeholderhash", "blood_bank", f"+91 {random.randint(7000000000, 9999999999)}", city)
     )
     user_id = c.lastrowid
 
     bank_id = c.execute(
-        "INSERT INTO blood_banks (user_id, name, hospital_name, doctor_id, license_number, address, city, pincode, latitude, longitude, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO blood_banks (user_id, name, hospital_name, doctor_id, license_number, address, city, pincode, latitude, longitude, phone) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (user_id, name, name, doc_id, f"LIC{random.randint(100000,999999)}", f"{random.randint(1,999)} Main Road", city, pincode, lat, lon, f"+91 {random.randint(10000,99999)} {random.randint(10000,99999)}")
     ).lastrowid
     bank_ids.append(bank_id)
@@ -121,7 +121,7 @@ for bank_id in bank_ids:
         else:
             units = random.randint(0, 15)
         c.execute(
-            "INSERT INTO blood_stock (blood_bank_id, blood_group, units_available) VALUES (?, ?, ?)",
+            "INSERT INTO blood_stock (blood_bank_id, blood_group, units_available) VALUES (%s, %s, %s)",
             (bank_id, bg, units)
         )
 
@@ -158,7 +158,7 @@ for i in range(500):
 
     email = f"donor{i+1}@example.com"
     c.execute(
-        "INSERT INTO users (email, password_hash, role, phone, city) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO users (email, password_hash, role, phone, city) VALUES (%s, %s, %s, %s, %s)",
         (email, "$2b$12$placeholderhash", "donor", phone, city)
     )
     user_id = c.lastrowid
@@ -168,7 +168,7 @@ for i in range(500):
            (user_id, name, blood_group, gender, age, phone, aadhaar, mobile_verified,
             sms_consent, weight, previous_hb, diseases, bad_habits, disorders,
             pincode, latitude, longitude, city, last_donation_date, status, is_rare_group, priority)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (user_id, name, bg, gender, age, phone, aadhaar, mobile_verified,
          sms_consent, weight, previous_hb, diseases, bad_habits, disorders,
          pincode, lat, lon, city, last_donation, status, is_rare, priority)
@@ -212,7 +212,7 @@ request_data = [
 
 for patient, hospital, doc_id, bg, units, priority, city, pincode in request_data:
     c.execute(
-        "INSERT INTO requests (patient_name, hospital_name, doctor_id, blood_group, units_needed, priority, city, pincode, verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+        "INSERT INTO requests (patient_name, hospital_name, doctor_id, blood_group, units_needed, priority, city, pincode, verified) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1)",
         (patient, hospital, doc_id, bg, units, priority, city, pincode)
     )
 

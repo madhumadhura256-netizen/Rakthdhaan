@@ -36,7 +36,7 @@ def process_alerts():
     if not request_id:
         return jsonify({'error': 'request_id required'}), 400
 
-    req = db.execute('SELECT * FROM requests WHERE id = ?', (request_id,)).fetchone()
+    req = db.execute('SELECT * FROM requests WHERE id = %s', (request_id,)).fetchone()
     if not req:
         return jsonify({'error': 'Request not found'}), 404
 
@@ -47,7 +47,7 @@ def process_alerts():
 
     # 1. Stock-first: check blood bank stock
     stock_rows = db.execute(
-        'SELECT * FROM blood_stock WHERE blood_group = ? AND units_available > 0', (blood_group,)
+        'SELECT * FROM blood_stock WHERE blood_group = %s AND units_available > 0', (blood_group,)
     ).fetchall()
     stock_available = sum(r['units_available'] for r in stock_rows)
 
@@ -67,7 +67,7 @@ def process_alerts():
 
     # 2. Find eligible donors (active, matching blood group)
     donors = db.execute(
-        "SELECT * FROM donors WHERE status = 'active' AND blood_group = ?", (blood_group,)
+        "SELECT * FROM donors WHERE status = 'active' AND blood_group = %s", (blood_group,)
     ).fetchall()
 
     # 3. Rank donors by distance, response time, eligibility, AND donor priority
@@ -117,7 +117,7 @@ def process_alerts():
                 'status': 'sent',
             }
             db.execute(
-                'INSERT INTO alerts_sent (request_id, donor_id, channel, status) VALUES (?, ?, ?, ?)',
+                'INSERT INTO alerts_sent (request_id, donor_id, channel, status) VALUES (%s, %s, %s, %s)',
                 (request_id, donor['id'], channel, 'sent')
             )
             all_alerted.append(alert)
@@ -140,12 +140,12 @@ def respond_to_alert(request_id):
     if response not in ('accept', 'decline'):
         return jsonify({'error': 'response must be accept or decline'}), 400
 
-    donor = db.execute('SELECT * FROM donors WHERE user_id = ?', (user_id,)).fetchone()
+    donor = db.execute('SELECT * FROM donors WHERE user_id = %s', (user_id,)).fetchone()
     if not donor:
         return jsonify({'error': 'Donor profile not found'}), 404
 
     alert = db.execute(
-        'SELECT * FROM alerts_sent WHERE request_id = ? AND donor_id = ? AND status = ?',
+        'SELECT * FROM alerts_sent WHERE request_id = %s AND donor_id = %s AND status = %s',
         (request_id, donor['id'], 'sent')
     ).fetchone()
     if not alert:
@@ -153,13 +153,13 @@ def respond_to_alert(request_id):
 
     new_status = 'accepted' if response == 'accept' else 'declined'
     db.execute(
-        'UPDATE alerts_sent SET status = ?, responded_at = CURRENT_TIMESTAMP WHERE id = ?',
+        'UPDATE alerts_sent SET status = %s, responded_at = CURRENT_TIMESTAMP WHERE id = %s',
         (new_status, alert['id'])
     )
 
     if response == 'accept':
         db.execute(
-            'UPDATE donors SET total_requests_responded = total_requests_responded + 1 WHERE id = ?',
+            'UPDATE donors SET total_requests_responded = total_requests_responded + 1 WHERE id = %s',
             (donor['id'],)
         )
 
@@ -177,7 +177,7 @@ def list_alerts(request_id):
         '''SELECT a.*, d.name as donor_name, d.blood_group, d.phone as donor_phone
            FROM alerts_sent a
            JOIN donors d ON a.donor_id = d.id
-           WHERE a.request_id = ?
+           WHERE a.request_id = %s
            ORDER BY a.sent_at DESC''', (request_id,)
     ).fetchall()
     return jsonify([dict(r) for r in rows])

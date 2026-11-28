@@ -30,7 +30,7 @@ def seed():
             '''INSERT INTO requests
                (patient_name, hospital_name, blood_group, units_needed,
                 priority, status, verified, city)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
             ('DEMO Patient (sample)', hospital['name'], blood_group, 2,
              'urgent', 'pending', 1, city)
         )
@@ -39,7 +39,7 @@ def seed():
         db.execute(
             '''INSERT INTO request_bank_notices
                (request_id, blood_bank_id, status, distance_km)
-               VALUES (?, ?, 'notified', 3.4)''',
+               VALUES (%s, %s, 'notified', 3.4)''',
             (request_id, hospital['id'])
         )
 
@@ -52,7 +52,7 @@ def seed():
             db.execute(
                 '''INSERT INTO alerts_sent
                    (request_id, donor_id, status, donor_message)
-                   VALUES (?, ?, ?, ?)''',
+                   VALUES (%s, %s, %s, %s)''',
                 (request_id, donor_id, status, message)
             )
 

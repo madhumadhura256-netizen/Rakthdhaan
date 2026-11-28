@@ -13,16 +13,16 @@ print('\nExisting donors:')
 for d in conn.execute('SELECT id, name, blood_group, status FROM donors'):
     print(f"  ID {d['id']}: {d['name']} {d['blood_group']} [{d['status']}]")
 
-if input('\nCreate a new blood bank? (y/n): ').strip().lower() == 'y':
+if input('\nCreate a new blood bank%s (y/n): ').strip().lower() == 'y':
     email = input('Admin email that owns it: ').strip().lower()
-    user = conn.execute('SELECT id FROM users WHERE lower(email) = ?', (email,)).fetchone()
+    user = conn.execute('SELECT id FROM users WHERE lower(email) = %s', (email,)).fetchone()
     if not user:
         raise SystemExit('No user with that email.')
     name = input('Blood bank name: ').strip() or 'City Blood Bank'
     city = input('City: ').strip() or 'Bengaluru'
     phone = input('Phone: ').strip()
     cur = conn.execute(
-        'INSERT INTO blood_banks (user_id, name, city, phone) VALUES (?, ?, ?, ?)',
+        'INSERT INTO blood_banks (user_id, name, city, phone) VALUES (%s, %s, %s, %s)',
         (user['id'], name, city, phone),
     )
     conn.commit()

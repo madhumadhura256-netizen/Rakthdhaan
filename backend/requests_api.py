@@ -22,13 +22,13 @@ def list_requests():
     query = 'SELECT * FROM requests WHERE 1=1'
     params = []
     if status:
-        query += ' AND status = ?'
+        query += ' AND status = %s'
         params.append(status)
     if blood_group:
-        query += ' AND blood_group = ?'
+        query += ' AND blood_group = %s'
         params.append(blood_group)
     if city:
-        query += ' AND city = ?'
+        query += ' AND city = %s'
         params.append(city)
 
     query += ' ORDER BY '
@@ -73,18 +73,18 @@ def create_request():
     cursor = db.execute(
         '''INSERT INTO requests (requester_id, patient_name, hospital_name, doctor_id, nurse_id, paramedic_id,
                blood_group, units_needed, priority, city, pincode, latitude, longitude)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
         (g.current_user['user_id'], patient_name, hospital_name, doctor_id, nurse_id, paramedic_id,
          blood_group, units_needed, priority, city, pincode, latitude, longitude)
     )
-    request_id = cursor.lastrowid
+    request_id = cursor.fetchone()['id']
     db.commit()
 
     # Auto-verify if requester is staff
     user_role = g.current_user.get('role')
     if user_role in ('admin', 'doctor', 'paramedical', 'nurse', 'blood_connect'):
         db.execute(
-            'UPDATE requests SET verified = 1, verified_by = ?, verified_at = CURRENT_TIMESTAMP WHERE id = ?',
+            'UPDATE requests SET verified = 1, verified_by = %s, verified_at = CURRENT_TIMESTAMP WHERE id = %s',
             (g.current_user['user_id'], request_id)
         )
         # Create hospital inbox notices
@@ -94,7 +94,7 @@ def create_request():
             '''SELECT h.id, h.latitude, h.longitude
                FROM hospitals h
                JOIN hospital_blood_stock hbs ON hbs.hospital_id = h.id
-               WHERE hbs.blood_group = ? AND hbs.units_available > 0 AND h.verified = 1''',
+               WHERE hbs.blood_group = %s AND hbs.units_available > 0 AND h.verified = 1''',
             (blood_group,)
         ).fetchall()
 
@@ -110,7 +110,7 @@ def create_request():
                 distance = R * c
 
             db.execute(
-                'INSERT INTO request_bank_notices (request_id, blood_bank_id, status, distance_km) VALUES (?, ?, ?, ?)',
+                'INSERT INTO request_bank_notices (request_id, blood_bank_id, status, distance_km) VALUES (%s, %s, %s, %s)',
                 (request_id, hosp['id'], 'notified', round(distance, 1) if distance else None)
             )
         db.commit()
@@ -128,7 +128,7 @@ def create_request():
 @token_required
 def get_request(request_id):
     db = get_db()
-    row = db.execute('SELECT * FROM requests WHERE id = ?', (request_id,)).fetchone()
+    row = db.execute('SELECT * FROM requests WHERE id = %s', (request_id,)).fetchone()
     if not row:
         return jsonify({'error': 'Request not found'}), 404
 
@@ -136,7 +136,7 @@ def get_request(request_id):
     alerts = db.execute(
         '''SELECT a.*, d.name as donor_name, d.phone as donor_phone, d.blood_group as donor_bg
            FROM alerts_sent a JOIN donors d ON d.id = a.donor_id
-           WHERE a.request_id = ?''',
+           WHERE a.request_id = %s''',
         (request_id,)
     ).fetchall()
 
@@ -150,12 +150,12 @@ def get_request(request_id):
 @role_required('admin', 'doctor', 'paramedical', 'nurse', 'blood_connect')
 def verify_request(request_id):
     db = get_db()
-    row = db.execute('SELECT * FROM requests WHERE id = ?', (request_id,)).fetchone()
+    row = db.execute('SELECT * FROM requests WHERE id = %s', (request_id,)).fetchone()
     if not row:
         return jsonify({'error': 'Request not found'}), 404
 
     db.execute(
-        'UPDATE requests SET verified = 1, verified_by = ?, verified_at = CURRENT_TIMESTAMP WHERE id = ?',
+        'UPDATE requests SET verified = 1, verified_by = %s, verified_at = CURRENT_TIMESTAMP WHERE id = %s',
         (g.current_user['user_id'], request_id)
     )
 
@@ -168,7 +168,7 @@ def verify_request(request_id):
         '''SELECT h.id, h.latitude, h.longitude
            FROM hospitals h
            JOIN hospital_blood_stock hbs ON hbs.hospital_id = h.id
-           WHERE hbs.blood_group = ? AND hbs.units_available > 0 AND h.verified = 1''',
+           WHERE hbs.blood_group = %s AND hbs.units_available > 0 AND h.verified = 1''',
         (blood_group,)
     ).fetchall()
 
@@ -184,7 +184,7 @@ def verify_request(request_id):
             distance = R * c
 
         db.execute(
-            'INSERT INTO request_bank_notices (request_id, blood_bank_id, status, distance_km) VALUES (?, ?, ?, ?)',
+            'INSERT INTO request_bank_notices (request_id, blood_bank_id, status, distance_km) VALUES (%s, %s, %s, %s)',
             (request_id, hosp['id'], 'notified', round(distance, 1) if distance else None)
         )
 
@@ -203,7 +203,7 @@ def verify_request(request_id):
 @token_required
 def update_request(request_id):
     db = get_db()
-    row = db.execute('SELECT * FROM requests WHERE id = ?', (request_id,)).fetchone()
+    row = db.execute('SELECT * FROM requests WHERE id = %s', (request_id,)).fetchone()
     if not row:
         return jsonify({'error': 'Request not found'}), 404
 
@@ -219,14 +219,14 @@ def update_request(request_id):
     params = []
     for key in allowed_fields:
         if key in data:
-            fields.append(f'{key} = ?')
+            fields.append(f'{key} = %s')
             params.append(data[key])
 
     if not fields:
         return jsonify({'error': 'No fields to update'}), 400
 
     params.append(request_id)
-    query = f'UPDATE requests SET {", ".join(fields)} WHERE id = ?'
+    query = f'UPDATE requests SET {", ".join(fields)} WHERE id = %s'
     db.execute(query, params)
     db.commit()
 
@@ -238,7 +238,7 @@ def update_request(request_id):
 def my_requests():
     db = get_db()
     rows = db.execute(
-        'SELECT * FROM requests WHERE requester_id = ? ORDER BY created_at DESC',
+        'SELECT * FROM requests WHERE requester_id = %s ORDER BY created_at DESC',
         (g.current_user['user_id'],)
     ).fetchall()
     return jsonify([_request_row_to_dict(r) for r in rows])
@@ -255,7 +255,7 @@ def donor_messages(request_id):
         '''SELECT a.*, d.name as donor_name, d.phone as donor_phone, d.blood_group as donor_bg,
                   d.city as donor_city, d.email as donor_email
            FROM alerts_sent a JOIN donors d ON d.id = a.donor_id
-           WHERE a.request_id = ?
+           WHERE a.request_id = %s
            ORDER BY a.sent_at DESC''',
         (request_id,)
     ).fetchall()
@@ -272,7 +272,7 @@ def hospital_donor_messages(request_id):
         '''SELECT a.*, d.name as donor_name, d.phone as donor_phone, d.blood_group as donor_bg,
                   d.city as donor_city
            FROM alerts_sent a JOIN donors d ON d.id = a.donor_id
-           WHERE a.request_id = ?
+           WHERE a.request_id = %s
            ORDER BY a.sent_at DESC''',
         (request_id,)
     ).fetchall()
@@ -294,12 +294,12 @@ def donor_send_message():
         return jsonify({'error': 'request_id and message required'}), 400
 
     # Verify this donor has an alert for this request
-    donor = db.execute('SELECT id FROM donors WHERE user_id = ?', (g.current_user['user_id'],)).fetchone()
+    donor = db.execute('SELECT id FROM donors WHERE user_id = %s', (g.current_user['user_id'],)).fetchone()
     if not donor:
         return jsonify({'error': 'Donor profile not found'}), 404
 
     alert = db.execute(
-        'SELECT id FROM alerts_sent WHERE request_id = ? AND donor_id = ?',
+        'SELECT id FROM alerts_sent WHERE request_id = %s AND donor_id = %s',
         (request_id, donor['id'])
     ).fetchone()
     if not alert:
@@ -314,7 +314,7 @@ def donor_send_message():
         pass
 
     db.execute(
-        'UPDATE alerts_sent SET donor_message = ?, responded_at = CURRENT_TIMESTAMP WHERE id = ?',
+        'UPDATE alerts_sent SET donor_message = %s, responded_at = CURRENT_TIMESTAMP WHERE id = %s',
         (message, alert['id'])
     )
     db.commit()
@@ -334,6 +334,6 @@ def request_stats():
     stats['critical'] = db.execute("SELECT COUNT(*) as c FROM requests WHERE priority = 'critical'").fetchone()['c']
     stats['by_blood_group'] = {}
     for bg in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']:
-        count = db.execute("SELECT COUNT(*) as c FROM requests WHERE blood_group = ?", (bg,)).fetchone()['c']
+        count = db.execute("SELECT COUNT(*) as c FROM requests WHERE blood_group = %s", (bg,)).fetchone()['c']
         stats['by_blood_group'][bg] = count
     return jsonify(stats)

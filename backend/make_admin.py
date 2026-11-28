@@ -12,11 +12,11 @@ email = input('Admin email: ').strip().lower()
 conn = sqlite3.connect(DB)
 conn.row_factory = sqlite3.Row
 
-user = conn.execute('SELECT id, role FROM users WHERE email = ?', (email,)).fetchone()
+user = conn.execute('SELECT id, role FROM users WHERE email = %s', (email,)).fetchone()
 
 if user:
     # Email already registered: just promote it
-    conn.execute("UPDATE users SET role = 'admin', verified = 1 WHERE id = ?", (user['id'],))
+    conn.execute("UPDATE users SET role = 'admin', verified = 1 WHERE id = %s", (user['id'],))
     conn.commit()
     print(f"Done. {email} was '{user['role']}' and is now admin.")
 else:
@@ -29,7 +29,7 @@ else:
 
     pw_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     conn.execute(
-        "INSERT INTO users (email, password_hash, role, verified) VALUES (?, ?, 'admin', 1)",
+        "INSERT INTO users (email, password_hash, role, verified) VALUES (%s, %s, 'admin', 1)",
         (email, pw_hash),
     )
     conn.commit()

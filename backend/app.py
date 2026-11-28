@@ -12,7 +12,7 @@ from transfers import transfers_bp
 from otp import otp_bp
 from Migrations import (
     ensure_donor_columns, ensure_donation_history_columns,
-    ensure_request_flow_tables, refresh_donor_status,
+    ensure_request_columns, ensure_request_flow_tables, refresh_donor_status,
 )
 from hospital import hospital_bp
 from flask_cors import CORS
@@ -58,11 +58,15 @@ def health():
 
 with app.app_context():
     init_db()
-    ensure_donor_columns(get_db())
-    ensure_donation_history_columns(get_db())
+    try:
+        ensure_donor_columns(get_db())
+        ensure_donation_history_columns(get_db())
+        refresh_donor_status(get_db())
+    except Exception:
+        pass
+    ensure_request_columns(get_db())
     ensure_request_flow_tables(get_db())
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
-    
     

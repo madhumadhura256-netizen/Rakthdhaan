@@ -57,7 +57,7 @@ for r in ROWS:
         '''INSERT INTO request_inbox
            (patient_name, hospital_name, doctor_id, blood_group, units_needed, priority, city,
             message, documents, requester_phone, bank_name, distance_km, units_in_stock)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?)''',
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, '', %s, %s, %s)''',
         (r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], json.dumps(r[8]), r[9], r[10], r[11]),
     )
 

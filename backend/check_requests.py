@@ -15,7 +15,7 @@ for r in conn.execute(
 rid = input('\nRequest ID to reset to unverified for testing (Enter to skip): ').strip()
 if rid.isdigit():
     conn.execute(
-        'UPDATE requests SET verified = 0, verified_by = NULL, verified_at = NULL WHERE id = ?',
+        'UPDATE requests SET verified = 0, verified_by = NULL, verified_at = NULL WHERE id = %s',
         (int(rid),),
     )
     conn.commit()

@@ -39,14 +39,14 @@ def _owns_hospital(db, user, hospital_id):
     """Admins see everything; hospital staff only their own hospital."""
     if user.get('role') == 'admin':
         return True
-    row = db.execute('SELECT user_id FROM hospitals WHERE id = ?', (hospital_id,)).fetchone()
+    row = db.execute('SELECT user_id FROM hospitals WHERE id = %s', (hospital_id,)).fetchone()
     return bool(row) and row['user_id'] == user['user_id']
 
 
 def _has_access_to_request(db, user, request_id):
     """True if the user's hospital received a notice for this request (admin: always)."""
     notices = db.execute(
-        'SELECT blood_bank_id FROM request_bank_notices WHERE request_id = ?',
+        'SELECT blood_bank_id FROM request_bank_notices WHERE request_id = %s',
         (request_id,)
     ).fetchall()
     if not notices:
@@ -86,7 +86,7 @@ def register_hospital():
     db = get_db()
     user = g.current_user
 
-    existing = db.execute('SELECT id FROM hospitals WHERE user_id = ?', (user['user_id'],)).fetchone()
+    existing = db.execute('SELECT id FROM hospitals WHERE user_id = %s', (user['user_id'],)).fetchone()
     if existing:
         return jsonify({'error': 'Hospital profile already exists for this user'}), 409
 
@@ -114,7 +114,7 @@ def register_hospital():
     db.execute(
         '''INSERT INTO hospitals (user_id, hospital_id, name, address, city, pincode,
                latitude, longitude, phone, email, license_number, license_document)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
         (user['user_id'], hospital_id, name, address, city, pincode,
          latitude, longitude, phone, email, license_number, license_document)
     )
@@ -133,7 +133,7 @@ def register_hospital():
 def my_hospital_profile():
     """Hospital views their own profile"""
     db = get_db()
-    row = db.execute('SELECT * FROM hospitals WHERE user_id = ?', (g.current_user['user_id'],)).fetchone()
+    row = db.execute('SELECT * FROM hospitals WHERE user_id = %s', (g.current_user['user_id'],)).fetchone()
     if not row:
         return jsonify({'error': 'Hospital profile not found'}), 404
     return jsonify(dict(row))
@@ -167,24 +167,24 @@ def admin_verify_hospital(hospital_id):
     verified = data.get('verified', True)
     notes = data.get('notes', '')
 
-    hospital = db.execute('SELECT * FROM hospitals WHERE id = ?', (hospital_id,)).fetchone()
+    hospital = db.execute('SELECT * FROM hospitals WHERE id = %s', (hospital_id,)).fetchone()
     if not hospital:
         return jsonify({'error': 'Hospital not found'}), 404
 
     if verified:
         db.execute(
-            'UPDATE hospitals SET verified = 1, verified_by = ?, verified_at = CURRENT_TIMESTAMP, '
-            'verification_notes = ? WHERE id = ?',
+            'UPDATE hospitals SET verified = 1, verified_by = %s, verified_at = CURRENT_TIMESTAMP, '
+            'verification_notes = %s WHERE id = %s',
             (g.current_user['user_id'], notes, hospital_id)
         )
         db.execute(
-            'UPDATE users SET verified = 1, verified_by = ?, verified_at = CURRENT_TIMESTAMP WHERE id = ?',
+            'UPDATE users SET verified = 1, verified_by = %s, verified_at = CURRENT_TIMESTAMP WHERE id = %s',
             (g.current_user['user_id'], hospital['user_id'])
         )
         msg = 'Hospital verified successfully'
     else:
         db.execute(
-            'UPDATE hospitals SET verified = 0, verification_notes = ? WHERE id = ?',
+            'UPDATE hospitals SET verified = 0, verification_notes = %s WHERE id = %s',
             (notes, hospital_id)
         )
         msg = 'Hospital verification rejected'
@@ -223,13 +223,13 @@ def get_hospital_stock():
         if not hospital_id:
             return jsonify({'error': 'hospital_id required for admin'}), 400
     else:
-        hospital = db.execute('SELECT id FROM hospitals WHERE user_id = ?', (user['user_id'],)).fetchone()
+        hospital = db.execute('SELECT id FROM hospitals WHERE user_id = %s', (user['user_id'],)).fetchone()
         if not hospital:
             return jsonify({'error': 'Hospital profile not found'}), 404
         hospital_id = hospital['id']
 
     rows = db.execute(
-        'SELECT * FROM hospital_blood_stock WHERE hospital_id = ? ORDER BY blood_group',
+        'SELECT * FROM hospital_blood_stock WHERE hospital_id = %s ORDER BY blood_group',
         (hospital_id,)
     ).fetchall()
     return jsonify([dict(r) for r in rows])
@@ -264,24 +264,24 @@ def update_hospital_stock():
         if not hospital_id:
             return jsonify({'error': 'hospital_id required for admin'}), 400
     else:
-        hospital = db.execute('SELECT id FROM hospitals WHERE user_id = ?', (user['user_id'],)).fetchone()
+        hospital = db.execute('SELECT id FROM hospitals WHERE user_id = %s', (user['user_id'],)).fetchone()
         if not hospital:
             return jsonify({'error': 'Hospital profile not found'}), 404
         hospital_id = hospital['id']
 
     existing = db.execute(
-        'SELECT id FROM hospital_blood_stock WHERE hospital_id = ? AND blood_group = ?',
+        'SELECT id FROM hospital_blood_stock WHERE hospital_id = %s AND blood_group = %s',
         (hospital_id, blood_group)
     ).fetchone()
 
     if existing:
         db.execute(
-            'UPDATE hospital_blood_stock SET units_available = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?',
+            'UPDATE hospital_blood_stock SET units_available = %s, last_updated = CURRENT_TIMESTAMP WHERE id = %s',
             (units_available, existing['id'])
         )
     else:
         db.execute(
-            'INSERT INTO hospital_blood_stock (hospital_id, blood_group, units_available) VALUES (?, ?, ?)',
+            'INSERT INTO hospital_blood_stock (hospital_id, blood_group, units_available) VALUES (%s, %s, %s)',
             (hospital_id, blood_group, units_available)
         )
     db.commit()
@@ -307,11 +307,11 @@ def check_blood_availability():
                hbs.units_available, hbs.last_updated
         FROM hospital_blood_stock hbs
         JOIN hospitals h ON h.id = hbs.hospital_id
-        WHERE hbs.blood_group = ? AND hbs.units_available > 0 AND h.verified = 1
+        WHERE hbs.blood_group = %s AND hbs.units_available > 0 AND h.verified = 1
     '''
     params = [blood_group]
     if city:
-        query += ' AND h.city = ?'
+        query += ' AND h.city = %s'
         params.append(city)
     query += ' ORDER BY hbs.units_available DESC'
     result['hospitals'] = [dict(r) for r in db.execute(query, params).fetchall()]
@@ -321,11 +321,11 @@ def check_blood_availability():
                bs.units_available, bs.last_updated
         FROM blood_stock bs
         JOIN blood_banks b ON b.id = bs.blood_bank_id
-        WHERE bs.blood_group = ? AND bs.units_available > 0
+        WHERE bs.blood_group = %s AND bs.units_available > 0
     '''
     params2 = [blood_group]
     if city:
-        query2 += ' AND b.city = ?'
+        query2 += ' AND b.city = %s'
         params2.append(city)
     query2 += ' ORDER BY bs.units_available DESC'
     result['blood_banks'] = [dict(r) for r in db.execute(query2, params2).fetchall()]
@@ -358,7 +358,7 @@ def inbox():
     '''
     params = []
     if user.get('role') != 'admin':
-        sql += ' WHERE b.user_id = ?'
+        sql += ' WHERE b.user_id = %s'
         params.append(user['user_id'])
     sql += (" ORDER BY CASE r.priority WHEN 'critical' THEN 0 WHEN 'urgent' THEN 1 ELSE 2 END,"
             " r.created_at DESC")
@@ -369,7 +369,7 @@ def inbox():
         donors = db.execute(
             "SELECT d.id, d.name, d.blood_group, d.phone "
             "FROM alerts_sent a JOIN donors d ON d.id = a.donor_id "
-            "WHERE a.request_id = ? AND a.status = 'accepted'",
+            "WHERE a.request_id = %s AND a.status = 'accepted'",
             (row['request_id'],),
         ).fetchall()
         item['accepted_donors'] = [dict(d) for d in donors]
@@ -388,7 +388,7 @@ def respond_notice(notice_id):
         return jsonify({'error': 'response must be accepted, declined or fulfilled'}), 400
 
     notice = db.execute(
-        'SELECT * FROM request_bank_notices WHERE id = ?', (notice_id,)
+        'SELECT * FROM request_bank_notices WHERE id = %s', (notice_id,)
     ).fetchone()
     if not notice:
         return jsonify({'error': 'Notice not found'}), 404
@@ -396,11 +396,11 @@ def respond_notice(notice_id):
         return jsonify({'error': 'This request was sent to a different hospital'}), 403
 
     db.execute(
-        'UPDATE request_bank_notices SET status = ?, responded_at = CURRENT_TIMESTAMP WHERE id = ?',
+        'UPDATE request_bank_notices SET status = %s, responded_at = CURRENT_TIMESTAMP WHERE id = %s',
         (response, notice_id),
     )
     if response == 'fulfilled':
-        db.execute("UPDATE requests SET status = 'fulfilled' WHERE id = ?", (notice['request_id'],))
+        db.execute("UPDATE requests SET status = 'fulfilled' WHERE id = %s", (notice['request_id'],))
     db.commit()
     return jsonify({'message': f'Marked as {response}.'})
 
@@ -413,7 +413,7 @@ def respond_notice(notice_id):
 def donor_my_alerts():
     """Donor sees requests that were sent to their blood group"""
     db = get_db()
-    donor = db.execute('SELECT id FROM donors WHERE user_id = ?',
+    donor = db.execute('SELECT id FROM donors WHERE user_id = %s',
                        (g.current_user['user_id'],)).fetchone()
     if not donor:
         return jsonify({'error': 'Donor profile not found'}), 404
@@ -426,7 +426,7 @@ def donor_my_alerts():
                   r.hospital_name, r.hospital_name AS donate_at
            FROM alerts_sent a
            JOIN requests r ON r.id = a.request_id
-           WHERE a.donor_id = ?
+           WHERE a.donor_id = %s
            ORDER BY a.id DESC''',
         (donor['id'],)
     ).fetchall()
@@ -448,18 +448,18 @@ def donor_respond_alert(alert_id):
     if response not in ('accepted', 'declined'):
         return jsonify({'error': 'response must be accepted or declined'}), 400
 
-    donor = db.execute('SELECT id FROM donors WHERE user_id = ?',
+    donor = db.execute('SELECT id FROM donors WHERE user_id = %s',
                        (g.current_user['user_id'],)).fetchone()
     if not donor:
         return jsonify({'error': 'Donor profile not found'}), 404
 
-    alert = db.execute('SELECT id FROM alerts_sent WHERE id = ? AND donor_id = ?',
+    alert = db.execute('SELECT id FROM alerts_sent WHERE id = %s AND donor_id = %s',
                        (alert_id, donor['id'])).fetchone()
     if not alert:
         return jsonify({'error': 'Alert not found'}), 404
 
     db.execute(
-        'UPDATE alerts_sent SET status = ?, donor_message = ? WHERE id = ?',
+        'UPDATE alerts_sent SET status = %s, donor_message = %s WHERE id = %s',
         (response, message or None, alert_id)
     )
     db.commit()
@@ -492,9 +492,9 @@ def send_bulk_sms():
         hospital_id = data.get('hospital_id')
         if not hospital_id:
             return jsonify({'error': 'hospital_id required for admin'}), 400
-        hospital = db.execute('SELECT * FROM hospitals WHERE hospital_id = ?', (hospital_id,)).fetchone()
+        hospital = db.execute('SELECT * FROM hospitals WHERE hospital_id = %s', (hospital_id,)).fetchone()
     else:
-        hospital = db.execute('SELECT * FROM hospitals WHERE user_id = ?', (user['user_id'],)).fetchone()
+        hospital = db.execute('SELECT * FROM hospitals WHERE user_id = %s', (user['user_id'],)).fetchone()
 
     if not hospital:
         return jsonify({'error': 'Hospital not found'}), 404
@@ -507,7 +507,7 @@ def send_bulk_sms():
         SELECT d.id, d.name, d.phone, d.latitude, d.longitude, d.city,
                d.status, d.sms_consent, d.last_donation_date, d.cooldown_months, d.gender
         FROM donors d
-        WHERE d.blood_group = ?
+        WHERE d.blood_group = %s
         AND d.sms_consent = 1
         AND d.mobile_verified = 1
         AND d.status = 'active'
@@ -555,7 +555,7 @@ def send_bulk_sms():
 
     db.execute(
         '''INSERT INTO hospital_sms_log (hospital_id, blood_group, donors_count, message, sent_by, status)
-           VALUES (?, ?, ?, ?, ?, ?)''',
+           VALUES (%s, %s, %s, %s, %s, %s)''',
         (hospital['id'], blood_group, sent_count, message, user['user_id'],
          'sent' if not failed else 'partial')
     )
@@ -581,15 +581,15 @@ def sms_history():
         hospital_id = request.args.get('hospital_id')
         if not hospital_id:
             return jsonify({'error': 'hospital_id required for admin'}), 400
-        hospital = db.execute('SELECT id FROM hospitals WHERE hospital_id = ?', (hospital_id,)).fetchone()
+        hospital = db.execute('SELECT id FROM hospitals WHERE hospital_id = %s', (hospital_id,)).fetchone()
     else:
-        hospital = db.execute('SELECT id FROM hospitals WHERE user_id = ?', (user['user_id'],)).fetchone()
+        hospital = db.execute('SELECT id FROM hospitals WHERE user_id = %s', (user['user_id'],)).fetchone()
 
     if not hospital:
         return jsonify({'error': 'Hospital not found'}), 404
 
     rows = db.execute(
-        'SELECT * FROM hospital_sms_log WHERE hospital_id = ? ORDER BY sent_at DESC LIMIT 50',
+        'SELECT * FROM hospital_sms_log WHERE hospital_id = %s ORDER BY sent_at DESC LIMIT 50',
         (hospital['id'],)
     ).fetchall()
     return jsonify([dict(r) for r in rows])
@@ -619,14 +619,14 @@ def nearby_donors():
     # Reference location (hospital accounts, or admin who passes hospital_id)
     lat, lon = None, None
     if user['role'] == 'hospital':
-        hospital = db.execute('SELECT latitude, longitude FROM hospitals WHERE user_id = ?',
+        hospital = db.execute('SELECT latitude, longitude FROM hospitals WHERE user_id = %s',
                               (user['user_id'],)).fetchone()
         if hospital:
             lat, lon = hospital['latitude'], hospital['longitude']
     elif user['role'] == 'admin':
         hospital_id = request.args.get('hospital_id')
         if hospital_id:
-            hospital = db.execute('SELECT latitude, longitude FROM hospitals WHERE hospital_id = ?',
+            hospital = db.execute('SELECT latitude, longitude FROM hospitals WHERE hospital_id = %s',
                                   (hospital_id,)).fetchone()
             if hospital:
                 lat, lon = hospital['latitude'], hospital['longitude']
@@ -636,14 +636,14 @@ def nearby_donors():
                d.latitude, d.longitude, d.status, d.last_donation_date, d.cooldown_months,
                d.total_units_donated, d.created_at
         FROM donors d
-        WHERE d.blood_group = ?
+        WHERE d.blood_group = %s
         AND d.sms_consent = 1
         AND d.mobile_verified = 1
         AND d.status = 'active'
     '''
     params = [blood_group]
     if city:
-        query += ' AND d.city = ?'
+        query += ' AND d.city = %s'
         params.append(city)
 
     nearby = []
@@ -687,15 +687,15 @@ def reply_donor():
     if not access:
         return jsonify({'error': 'This request was sent to a different hospital'}), 403
 
-    donor = db.execute('SELECT * FROM donors WHERE id = ?', (donor_id,)).fetchone()
+    donor = db.execute('SELECT * FROM donors WHERE id = %s', (donor_id,)).fetchone()
     if not donor:
         return jsonify({'error': 'Donor not found'}), 404
 
     _ensure_columns(db)
 
     db.execute(
-        'UPDATE alerts_sent SET hospital_reply = ?, replied_at = CURRENT_TIMESTAMP '
-        'WHERE request_id = ? AND donor_id = ?',
+        'UPDATE alerts_sent SET hospital_reply = %s, replied_at = CURRENT_TIMESTAMP '
+        'WHERE request_id = %s AND donor_id = %s',
         (message, request_id, donor_id)
     )
     db.commit()
@@ -732,7 +732,7 @@ def hospital_donor_messages(request_id):
                   d.blood_group AS donor_bg, d.city AS donor_city
            FROM alerts_sent a
            JOIN donors d ON d.id = a.donor_id
-           WHERE a.request_id = ?
+           WHERE a.request_id = %s
              AND (a.status IN ('accepted', 'declined') OR a.donor_message IS NOT NULL)
            ORDER BY a.id DESC''',
         (request_id,)

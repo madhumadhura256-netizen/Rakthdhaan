@@ -40,10 +40,10 @@ def list_banks():
     params = []
     conditions = []
     if city:
-        conditions.append('city = ?')
+        conditions.append('city = %s')
         params.append(city)
     if pincode:
-        conditions.append('pincode = ?')
+        conditions.append('pincode = %s')
         params.append(pincode)
     if conditions:
         query += ' WHERE ' + ' AND '.join(conditions)
@@ -61,10 +61,10 @@ def get_stock():
     query = 'SELECT * FROM blood_stock WHERE 1=1'
     params = []
     if blood_bank_id:
-        query += ' AND blood_bank_id = ?'
+        query += ' AND blood_bank_id = %s'
         params.append(blood_bank_id)
     if blood_group:
-        query += ' AND blood_group = ?'
+        query += ' AND blood_group = %s'
         params.append(blood_group)
     rows = db.execute(query, params).fetchall()
     return jsonify([dict(r) for r in rows])
@@ -87,18 +87,18 @@ def update_stock():
         return jsonify({'error': 'units_available must be a non-negative integer'}), 400
 
     existing = db.execute(
-        'SELECT id FROM blood_stock WHERE blood_bank_id = ? AND blood_group = ?',
+        'SELECT id FROM blood_stock WHERE blood_bank_id = %s AND blood_group = %s',
         (blood_bank_id, blood_group)
     ).fetchone()
 
     if existing:
         db.execute(
-            'UPDATE blood_stock SET units_available = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?',
+            'UPDATE blood_stock SET units_available = %s, last_updated = CURRENT_TIMESTAMP WHERE id = %s',
             (units_available, existing['id'])
         )
     else:
         db.execute(
-            'INSERT INTO blood_stock (blood_bank_id, blood_group, units_available) VALUES (?, ?, ?)',
+            'INSERT INTO blood_stock (blood_bank_id, blood_group, units_available) VALUES (%s, %s, %s)',
             (blood_bank_id, blood_group, units_available)
         )
     db.commit()
@@ -129,7 +129,7 @@ def record_donation():
     if not all([donor_id, blood_bank_id, donation_date]):
         return jsonify({'error': 'donor_id, blood_bank_id, donation_date required'}), 400
 
-    donor = db.execute('SELECT * FROM donors WHERE id = ?', (donor_id,)).fetchone()
+    donor = db.execute('SELECT * FROM donors WHERE id = %s', (donor_id,)).fetchone()
     if not donor:
         return jsonify({'error': 'Donor not found'}), 404
 
@@ -150,31 +150,31 @@ def record_donation():
 
     # Mark donor inactive/cooldown
     db.execute(
-        'UPDATE donors SET status = ?, last_donation_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        'UPDATE donors SET status = %s, last_donation_date = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s',
         ('inactive', donation_date, donor_id)
     )
 
     # Record donation with certificate code
     db.execute(
         '''INSERT INTO donations (request_id, donor_id, blood_bank_id, donation_date, units, confirmed_by, certificate_code)
-           VALUES (?, ?, ?, ?, ?, ?, ?)''',
+           VALUES (%s, %s, %s, %s, %s, %s, %s)''',
         (request_id, donor_id, blood_bank_id, donation_date, units, confirmed_by, certificate_code)
     )
 
     # Add stock to blood bank
     donor_bg = donor['blood_group']
     existing = db.execute(
-        'SELECT id FROM blood_stock WHERE blood_bank_id = ? AND blood_group = ?',
+        'SELECT id FROM blood_stock WHERE blood_bank_id = %s AND blood_group = %s',
         (blood_bank_id, donor_bg)
     ).fetchone()
     if existing:
         db.execute(
-            'UPDATE blood_stock SET units_available = units_available + ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?',
+            'UPDATE blood_stock SET units_available = units_available + %s, last_updated = CURRENT_TIMESTAMP WHERE id = %s',
             (units, existing['id'])
         )
     else:
         db.execute(
-            'INSERT INTO blood_stock (blood_bank_id, blood_group, units_available) VALUES (?, ?, ?)',
+            'INSERT INTO blood_stock (blood_bank_id, blood_group, units_available) VALUES (%s, %s, %s)',
             (blood_bank_id, donor_bg, units)
         )
 
@@ -197,7 +197,7 @@ def reactivate_donors():
     db = get_db()
     today = datetime.now().strftime('%Y-%m-%d')
 
-    cursor = db.execute('SELECT id, name, last_donation_date, cooldown_months FROM donors WHERE status = ?', ('inactive',))
+    cursor = db.execute('SELECT id, name, last_donation_date, cooldown_months FROM donors WHERE status = %s', ('inactive',))
     inactive = cursor.fetchall()
 
     reactivated = []
@@ -211,7 +211,7 @@ def reactivate_donors():
         cooldown = d['cooldown_months'] or 3
         reactivate_dt = donation_dt + timedelta(days=cooldown * 30)
         if reactivate_dt.strftime('%Y-%m-%d') <= today:
-            db.execute('UPDATE donors SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ('active', d['id']))
+            db.execute('UPDATE donors SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s', ('active', d['id']))
             reactivated.append({'id': d['id'], 'name': d['name']})
 
     db.commit()
