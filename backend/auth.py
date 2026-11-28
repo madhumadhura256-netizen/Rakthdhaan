@@ -1,16 +1,14 @@
 import datetime
+import re
+from datetime import date
 from functools import wraps
 
 import jwt
+from dateutil.relativedelta import relativedelta
 from flask import Blueprint, jsonify, request, g, current_app
 from flask_bcrypt import Bcrypt
-import re
-from datetime import date
-
-from dateutil.relativedelta import relativedelta
 
 from otp import phone_is_verified
-
 from database import get_db
 
 auth_bp = Blueprint('auth', __name__)
@@ -18,7 +16,7 @@ bcrypt = Bcrypt()
 
 # Role hierarchy
 ROLES = {
-        'hospital': 6,
+    'hospital': 6,
     'admin': 5,
     'doctor': 4,
     'paramedical': 3,
@@ -37,7 +35,12 @@ EMAIL_RE = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$')
 STOCK_UPDATE_ROLES = {'admin', 'doctor', 'paramedical', 'blood_connect', 'hospital'}
 DONATION_RECORD_ROLES = {'admin', 'doctor', 'paramedical', 'blood_connect', 'hospital'}
 VERIFY_REQUEST_ROLES = {'admin', 'doctor', 'paramedical', 'blood_connect', 'hospital'}
-VIEW_BANKS_ROLES = {'admin', 'doctor', 'paramedical', 'blood_connect', 'donor', 'requester', 'hospital'}
+VIEW_BANKS_ROLES = {
+    'admin', 'doctor', 'paramedical', 'blood_connect',
+    'donor', 'requester', 'hospital',
+}
+
+
 def _token(user_id, role, email):
     payload = {
         'user_id': user_id,
@@ -201,15 +204,25 @@ def register():
     # ---------- save ----------
     pw_hash = bcrypt.generate_password_hash(password).decode('utf-8')
     cursor = db.execute(
-        'INSERT INTO users (email, password_hash, role, phone, city) VALUES (%s, %s, %s, %s, %s) RETURNING id',
+        'INSERT INTO users (email, password_hash, role, phone, city) '
+        'VALUES (%s, %s, %s, %s, %s) RETURNING id',
         (email, pw_hash, role, phone, city),
     )
     user_id = cursor.fetchone()['id']
+
     if donor:
         donor['user_id'] = user_id
         columns = ', '.join(donor)
-        marks = ', '.join('%s' * len(donor))
-        db.execute(f'INSERT INTO donors ({columns}) VALUES ({marks})', list(donor.values()))
+        marks = ', '.join(['%s'] * len(donor))  # one %s per column
+        try:
+            db.execute(
+                f'INSERT INTO donors ({columns}) VALUES ({marks})',
+                list(donor.values()),
+            )
+        except Exception:
+            # Don't leave a half-created account behind
+            db.execute('DELETE FROM users WHERE id = %s', (user_id,))
+            raise
 
     db.commit()
 
@@ -219,6 +232,7 @@ def register():
         'token': token,
         'user': {'id': user_id, 'email': email, 'role': role},
     }), 201
+
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
